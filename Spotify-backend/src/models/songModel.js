@@ -1,0 +1,41 @@
+import mongoose from "mongoose";
+
+const songSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+  },
+  artist: {
+    type: String,
+    required: true,
+  },
+  desc: {
+    type: String,
+    required: true,
+  },
+  playlist: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "playlist", // liên kết tới Playlist model
+    required: true,
+  },
+  album: {
+    type: String,
+    required: true,
+  },
+  image: {
+    type: String,
+    required: true,
+  },
+  duration: {
+    type: String,
+    required: true,
+  },
+  file: {
+    type: String,
+    required: true,
+  },
+});
+
+const songModel = mongoose.models.song || mongoose.model("song", songSchema);
+
+export default songModel;

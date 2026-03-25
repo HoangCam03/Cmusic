@@ -1,0 +1,179 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: spotify-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - spotify-network
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: spotify-api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - GATEWAY_PORT=3000
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+      - JWT_SECRET=your_jwt_secret_key_here
+      - REFRESH_TOKEN_SECRET=your_refresh_token_secret_here
+    depends_on:
+      - mongodb
+      - auth-service
+      - user-service
+      - catalog-service
+      - playlist-service
+      - likes-service
+      - history-service
+      - search-service
+      - admin-service
+    networks:
+      - spotify-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: spotify-auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - AUTH_SERVICE_PORT=3001
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+      - JWT_SECRET=your_jwt_secret_key_here
+      - REFRESH_TOKEN_SECRET=your_refresh_token_secret_here
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: spotify-user-service
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - USER_SERVICE_PORT=3002
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  catalog-service:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: spotify-catalog-service
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - CATALOG_SERVICE_PORT=3003
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  playlist-service:
+    build:
+      context: ./playlist-service
+      dockerfile: Dockerfile
+    container_name: spotify-playlist-service
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - PLAYLIST_SERVICE_PORT=3004
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  likes-service:
+    build:
+      context: ./likes-service
+      dockerfile: Dockerfile
+    container_name: spotify-likes-service
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=development
+      - LIKES_SERVICE_PORT=3005
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  history-service:
+    build:
+      context: ./history-service
+      dockerfile: Dockerfile
+    container_name: spotify-history-service
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=development
+      - HISTORY_SERVICE_PORT=3006
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  search-service:
+    build:
+      context: ./search-service
+      dockerfile: Dockerfile
+    container_name: spotify-search-service
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=development
+      - SEARCH_SERVICE_PORT=3007
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  admin-service:
+    build:
+      context: ./admin-service
+      dockerfile: Dockerfile
+    container_name: spotify-admin-service
+    ports:
+      - "3008:3008"
+    environment:
+      - NODE_ENV=development
+      - ADMIN_SERVICE_PORT=3008
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/spotify
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  spotify-network:
+    driver: bridge
+

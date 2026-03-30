@@ -1,4 +1,4 @@
-export { default as Sidebar } from './Sidebar';
-export { default as Player } from './Player';
-export { default as Display } from './Display';
-export { default as Header } from './Header';
+export { Sidebar } from './Sidebar';
+export { Player } from './Player';
+export { Display } from './Display';
+export { Header } from './Header';

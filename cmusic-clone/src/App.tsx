@@ -1,8 +1,8 @@
 import React, { useContext, useEffect } from "react";
-import Sidebar from "./components/Sidebar";
-import Player from "./components/Player";
-import Display from "./components/Display";
-import Header from "./components/Header";
+import { Sidebar } from "./components/Sidebar";
+import { Player } from "./components/Player";
+import { Display } from "./components/Display";
+import { Header } from "./components/Header";
 import { PlayerContext } from "./context/PlayerContext";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSongs } from "./store/slices/songSlice";
@@ -31,7 +31,7 @@ const App: React.FC = () => {
   }, [songsStatus, playlistsState.status, dispatch]);
 
   return (
-    <div className="h-screen bg-black flex flex-col p-2 gap-2 font-sans overflow-hidden text-[#b3b3b3]">
+    <div className="h-screen bg-[#09090b] flex flex-col p-3 gap-3 font-sans overflow-hidden text-[#a1a1aa] selection:bg-purple-500/30">
       <Routes>
         <Route path="/signup" element={<Register />} />
         <Route path="/login" element={<Login />} />
@@ -39,27 +39,28 @@ const App: React.FC = () => {
           path="/*"
           element={
             <>
-              {/* Top Navigation */}
               <Header />
 
-              {/* Main Content Area */}
-              <div className="flex-1 flex gap-2 overflow-hidden">
+              <div className="flex-1 flex gap-3 overflow-hidden">
                 <Sidebar />
                 <Display />
               </div>
 
-              {/* Bottom Promotional Bar for logged-out users */}
-              <div className="h-[75px] w-full px-6 py-3 flex justify-between items-center bg-gradient-to-r from-[#af2896] to-[#509bf5] cursor-pointer hover:scale-[1.01] transition-transform rounded-lg">
-                <div className="text-white">
-                  <p className="text-sm font-bold uppercase tracking-wider mb-1">Xem trước Spotify</p>
-                  <p className="font-semibold text-[15px]">Đăng ký để nghe không giới hạn các bài hát và podcast với quảng cáo không thường xuyên. Không cần thẻ tín dụng.</p>
+              {/* Bottom Promotional Bar - K-Style Glassmorphism */}
+              <div className="h-[80px] w-full px-8 py-4 flex justify-between items-center bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 transition-all duration-300 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]">
+                <div className="text-white flex flex-col justify-center">
+                  <p className="text-[13px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 uppercase tracking-widest mb-1.5">
+                    Trải nghiệm CMusic
+                  </p>
+                  <p className="font-medium text-[15px] opacity-90 tracking-wide">
+                    Tận hưởng kho nhạc không giới hạn với chất lượng đỉnh cao. Tham gia ngay hôm nay!
+                  </p>
                 </div>
-                <button className="bg-white text-black text-base font-bold py-3 px-8 rounded-full hover:scale-105 transition hover:-mb-[2px]">
+                <button className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold py-3.5 px-10 rounded-full hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:-translate-y-0.5 transition-all duration-300">
                   Đăng ký miễn phí
                 </button>
               </div>
 
-              {/* Keep existing player mechanics around behind scenes or conditionally rendered */}
               {playerContext?.playStatus && <Player />}
               {track && <audio ref={audioRef} src={track.file} preload="auto"></audio>}
             </>

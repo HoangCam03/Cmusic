@@ -1,10 +1,10 @@
-import { FC, useState } from "react";
+import { useState } from "react";
 
 interface CreatePlaylistProps {
   onClose?: () => void;
 }
 
-const CreatePlaylist: FC<CreatePlaylistProps> = ({ onClose }) => {
+export function CreatePlaylist({ onClose }: CreatePlaylistProps) {
   const [name, setName] = useState("");
 
   const handleSubmit = (e: React.FormEvent): void => {
@@ -32,6 +32,4 @@ const CreatePlaylist: FC<CreatePlaylistProps> = ({ onClose }) => {
       </form>
     </div>
   );
-};
-
-export default CreatePlaylist;
+}

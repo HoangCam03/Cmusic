@@ -1,7 +1,6 @@
-import { FC } from "react";
 import { useNavigate } from "react-router-dom";
 
-const Login: FC = (): JSX.Element => {
+export default function Login() {
   const navigate = useNavigate();
 
   const handleSubmit = (): void => {
@@ -22,6 +21,4 @@ const Login: FC = (): JSX.Element => {
       </div>
     </div>
   );
-};
-
-export default Login;
+}

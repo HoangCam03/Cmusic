@@ -1,11 +1,11 @@
 services:
-  spotify-frontend:
+  cmusic-frontend:
     build:
       context: .
       dockerfile: Dockerfile.dev
       args:
         - VITE_API_URL=http://localhost:3000/api
-    container_name: spotify-frontend
+    container_name: cmusic-frontend
     ports:
       - "5173:5173"
     volumes:

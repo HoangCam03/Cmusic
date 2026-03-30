@@ -1,7 +1,6 @@
-import { FC } from "react";
 import { useNavigate } from "react-router-dom";
 
-const Register: FC = () => {
+export default function Register() {
   const navigate = useNavigate();
 
   const handleSubmit = (): void => {
@@ -23,6 +22,4 @@ const Register: FC = () => {
       </div>
     </div>
   );
-};
-
-export default Register;
+}

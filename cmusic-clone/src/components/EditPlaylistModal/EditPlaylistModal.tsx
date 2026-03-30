@@ -1,4 +1,4 @@
-import { FC, useState } from "react";
+import { useState } from "react";
 
 interface Playlist {
   _id: string;
@@ -11,7 +11,7 @@ interface EditPlaylistModalProps {
   onSave?: (name: string) => void;
 }
 
-const EditPlaylistModal: FC<EditPlaylistModalProps> = ({ playlist, onClose, onSave }) => {
+export function EditPlaylistModal({ playlist, onClose, onSave }: EditPlaylistModalProps) {
   const [name, setName] = useState(playlist?.name || "");
 
   const handleSubmit = (e: React.FormEvent): void => {
@@ -44,6 +44,4 @@ const EditPlaylistModal: FC<EditPlaylistModalProps> = ({ playlist, onClose, onSa
       </div>
     </div>
   );
-};
-
-export default EditPlaylistModal;
+}

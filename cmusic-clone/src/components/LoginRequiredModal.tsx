@@ -1,10 +1,8 @@
-import { FC } from "react";
-
 interface LoginRequiredModalProps {
   onClose?: () => void;
 }
 
-const LoginRequiredModal: FC<LoginRequiredModalProps> = ({ onClose }) => {
+export function LoginRequiredModal({ onClose }: LoginRequiredModalProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
       <div className="p-6 bg-gray-900 rounded text-white w-96">
@@ -16,6 +14,4 @@ const LoginRequiredModal: FC<LoginRequiredModalProps> = ({ onClose }) => {
       </div>
     </div>
   );
-};
-
-export default LoginRequiredModal;
+}

@@ -29,14 +29,6 @@ services:
       - REFRESH_TOKEN_SECRET=your_refresh_token_secret_here
     depends_on:
       - mongodb
-      - auth-service
-      - user-service
-      - catalog-service
-      - playlist-service
-      - likes-service
-      - history-service
-      - search-service
-      - admin-service
     networks:
       - cmusic-network
 

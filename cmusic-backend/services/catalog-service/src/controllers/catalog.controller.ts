@@ -45,24 +45,33 @@ class CatalogController {
     }
   }
 
-  // 3. Tạo bài hát mới (Dành cho Artist)
-  public async createTrack(req: Request, res: Response, next: NextFunction) {
+  // 3. Tạo bài hát mới (Dành cho Artist - Có upload file)
+  public async createTrack(req: any, res: Response, next: NextFunction) {
     try {
-      const userId = req.headers['x-user-id']; // Lấy từ Gateway sau khi verify token
-      const { title, duration, audioUrl, coverUrl, genre } = req.body;
+      const userId = req.headers['x-user-id']; // Gateway verify token -> x-user-id
+      const { title, genre, duration } = req.body;
+      const files = req.files as { [fieldname: string]: any[] };
+
+      // Lấy link từ Cloudinary đã được multer upload xong
+      const audioUrl = files?.['audio']?.[0]?.path; 
+      const coverUrl = files?.['cover']?.[0]?.path;
+
+      if (!audioUrl) {
+        return res.status(400).json({ success: false, message: "Vui lòng tải lên file bài hát" });
+      }
 
       const track = new Track({
         title,
-        duration,
+        genre,
+        duration: parseInt(duration) || 0,
         audioUrl,
         coverUrl,
-        genre,
         artistId: userId,
       });
 
       await track.save();
 
-      return res.status(201).json(new SuccessResponse('Thêm bài hát mới thành công', track, 201));
+      return res.status(201).json(new SuccessResponse('Đã tải bài hát lên CMusic thành công!', track, 201));
     } catch (error) {
       next(error);
     }

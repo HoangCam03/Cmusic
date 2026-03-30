@@ -11,6 +11,7 @@ import Register from "./components/Register/Register.tsx";
 import { Routes, Route } from "react-router-dom";
 import Login from "./components/Login/Login";
 import { RootState, AppDispatch } from "./store/store";
+import { UploadPage } from "./pages/UploadPage";
 
 const App: React.FC = () => {
   const playerContext = useContext(PlayerContext);
@@ -43,7 +44,10 @@ const App: React.FC = () => {
 
               <div className="flex-1 flex gap-3 overflow-hidden">
                 <Sidebar />
-                <Display />
+                <Routes>
+                  <Route path="/" element={<Display />} />
+                  <Route path="/upload" element={<UploadPage />} />
+                </Routes>
               </div>
 
               {/* Bottom Promotional Bar - K-Style Glassmorphism */}

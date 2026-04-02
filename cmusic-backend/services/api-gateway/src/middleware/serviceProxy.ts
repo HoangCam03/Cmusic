@@ -83,7 +83,7 @@ class ServiceProxy {
       };
     } catch (err) {
       console.error(
-        `❌ Lỗi khi gọi ${serviceName} ${method} ${path}:`,
+        ` Lỗi khi gọi ${serviceName} ${method} ${path}:`,
         err instanceof Error ? err.message : err
       );
 

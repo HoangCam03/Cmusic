@@ -15,19 +15,27 @@ RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
-# Copy libs source and metadata (needed for symlink in node_modules)
-COPY libs /app/libs
-# Copy project metadata
-COPY services/auth-service/package.json /app/services/auth-service/
 
-WORKDIR /app/services/auth-service
-# Install production dependencies
+# Copy libs source
+COPY libs /app/libs
+
+# Install libs own dependencies (includes mongoose)
+WORKDIR /app/libs
 RUN npm install --omit=dev
 
-# Copy compiled files from builder
+# Install service dependencies (also has mongoose)
+COPY services/auth-service/package.json /app/services/auth-service/
+WORKDIR /app/services/auth-service
+RUN npm install --omit=dev
+
+# KEY FIX: Force libs to use auth-service's mongoose instance (shared singleton)
+# This prevents the dual-instance buffer timeout issue
+RUN rm -rf /app/libs/node_modules/mongoose && \
+    ln -sf /app/services/auth-service/node_modules/mongoose /app/libs/node_modules/mongoose
+
+# Copy compiled output from builder
 COPY --from=builder /app/libs/dist /app/libs/dist
 COPY --from=builder /app/services/auth-service/dist ./dist
 
 EXPOSE 3001
 CMD ["node", "dist/services/auth-service/src/server.js"]
-

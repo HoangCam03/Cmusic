@@ -16,8 +16,10 @@ app.use(express.json());
 
 // ===== DATABASE CONNECTION =====
 const connectDatabase = async () => {
+  const mongoUri = process.env.MONGODB_URI || "mongodb://mongodb:27017/cmusic";
+  console.log(`Đang kết nối tới MongoDB tại: ${mongoUri.replace(/:([^:@]+)@/, ':****@')}`);
   try {
-    await mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/spotify");
+    await mongoose.connect(mongoUri);
     console.log("MongoDB kết nối thành công (Auth Service)");
   } catch (error) {
     console.error(

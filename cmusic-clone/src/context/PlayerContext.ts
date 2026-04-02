@@ -15,6 +15,14 @@ export interface PlayerContextType {
   play: () => void;
   pause: () => void;
   playWithId: (id: string) => Promise<void>;
+  isSearchOpen: boolean;
+  setIsSearchOpen: (isOpen: boolean) => void;
+  isShuffle: boolean;
+  toggleShuffle: () => void;
+  isRepeat: boolean;
+  toggleRepeat: () => void;
+  volume: number;
+  changeVolume: (e: any) => void;
   previous: () => Promise<void>;
   next: () => Promise<void>;
   seekSong: (e: any) => Promise<void>;

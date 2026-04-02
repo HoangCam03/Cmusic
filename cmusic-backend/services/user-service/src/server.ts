@@ -16,10 +16,10 @@ app.use(express.json());
 const connectDatabase = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/spotify");
-    console.log("✅ MongoDB kết nối thành công");
+    console.log(" MongoDB kết nối thành công");
   } catch (error) {
     console.error(
-      "❌ Lỗi kết nối MongoDB:",
+      " Lỗi kết nối MongoDB:",
       error instanceof Error ? error.message : error
     );
     process.exit(1);

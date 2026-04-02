@@ -17,10 +17,7 @@ const PORT = parseInt(process.env.GATEWAY_PORT || "3000", 10);
 // CORS configuration
 app.use(
   cors({
-    origin: [
-      process.env.FRONTEND_URL || "http://localhost:5173",
-      process.env.ADMIN_URL || "http://localhost:5174",
-    ],
+    origin: true, // Cho phép mọi Origin trong môi trường Dev (Vite thường đổi port sang 5174, 5175...)
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -44,16 +41,17 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // ===== PROXY CONFIGURATION HELPER =====
-const createProxy = (target: string, pathRewritePrefix: string = '/api'): Options => ({
+// NOTE: Express strips the mount prefix before passing to proxy middleware.
+// e.g., app.use("/api/auth", proxy) → proxy only sees "/login" (not "/api/auth/login")
+// So we must PREPEND the internal service prefix back.
+const createProxy = (target: string, internalPrefix: string = ''): Options => ({
   target,
   changeOrigin: true,
-  pathRewrite: {
-    [`^${pathRewritePrefix}`]: '', // Remove /api prefix when sending to microservice
-  },
+  pathRewrite: internalPrefix
+    ? { '^/': `${internalPrefix}/` }  // e.g., /login → /auth/login
+    : undefined,
   on: {
     proxyReq: (proxyReq, req: any, res) => {
-      // If the request body was already parsed by express.json(), 
-      // we need to re-stringify it for the proxy.
       if (req.body && Object.keys(req.body).length > 0) {
         const bodyData = JSON.stringify(req.body);
         proxyReq.setHeader('Content-Type', 'application/json');
@@ -62,7 +60,7 @@ const createProxy = (target: string, pathRewritePrefix: string = '/api'): Option
       }
     },
     error: (err: any, req, res: any) => {
-      console.error(`❌ Proxy Error [${target}]:`, err.message);
+      console.error(` Proxy Error [${target}]:`, err.message);
       if (!res.headersSent) {
         res.status(502).json({ success: false, message: 'Bad Gateway - Service is unavailable' });
       }
@@ -72,18 +70,24 @@ const createProxy = (target: string, pathRewritePrefix: string = '/api'): Option
 
 // ===== ROUTES & PROXYING =====
 
+// Request Logger for debugging
+app.use((req, res, next) => {
+  console.log(`[GATEWAY REQUEST]: ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // Health check
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "OK", service: "api-gateway", timestamp: new Date() });
 });
 
-// 1. Auth Service Proxy (Public - No authenticate needed for login/register)
-app.use("/api/auth", createProxyMiddleware(createProxy(SERVICES.AUTH)));
+// 1. Auth Service: /api/auth/login → proxy sees /login → prepend /auth → /auth/login ✓
+app.use("/api/auth", createProxyMiddleware(createProxy(SERVICES.AUTH, '/auth')));
 
-// 2. User Service Proxy (Partially Protected)
-app.use("/api/users", authenticate, createProxyMiddleware(createProxy(SERVICES.USER)));
+// 2. User Service: /api/users/profile → proxy sees /profile → prepend /users → /users/profile ✓
+app.use("/api/users", authenticate, createProxyMiddleware(createProxy(SERVICES.USER, '/users')));
 
-// 3. Catalog Service Proxy (Public for search/browse, PROTECTED for modifications)
+// 3. Catalog Service: /api/catalog/tracks → proxy sees /tracks → no prefix needed ✓
 app.use("/api/catalog", (req: Request, res: Response, next: NextFunction) => {
   if (req.method !== 'GET') {
     return authenticate(req as any, res, next);
@@ -91,26 +95,27 @@ app.use("/api/catalog", (req: Request, res: Response, next: NextFunction) => {
   next();
 }, createProxyMiddleware(createProxy(SERVICES.CATALOG)));
 
-// 4. Playlist Service Proxy (Protected)
-app.use("/api/playlists", authenticate, createProxyMiddleware(createProxy(SERVICES.PLAYLIST)));
+// 4. Playlist Service: /api/playlists/... → proxy sees /... → prepend /playlists
+app.use("/api/playlists", authenticate, createProxyMiddleware(createProxy(SERVICES.PLAYLIST, '/playlists')));
 
-// 5. Likes Service Proxy (Protected)
-app.use("/api/likes", authenticate, createProxyMiddleware(createProxy(SERVICES.LIKES)));
+// 5. Likes Service
+app.use("/api/likes", authenticate, createProxyMiddleware(createProxy(SERVICES.LIKES, '/likes')));
 
-// 6. History Service Proxy (Protected)
-app.use("/api/history", authenticate, createProxyMiddleware(createProxy(SERVICES.HISTORY)));
+// 6. History Service
+app.use("/api/history", authenticate, createProxyMiddleware(createProxy(SERVICES.HISTORY, '/history')));
 
-// 7. Search Service Proxy (Public)
-app.use("/api/search", createProxyMiddleware(createProxy(SERVICES.SEARCH)));
+// 7. Search Service
+app.use("/api/search", createProxyMiddleware(createProxy(SERVICES.SEARCH, '/search')));
 
-// 8. Admin Service Proxy (Protected + Role Admin)
-app.use("/api/admin", authenticate, authorize(['admin']), createProxyMiddleware(createProxy(SERVICES.ADMIN)));
+// 8. Admin Service (Protected + Role Admin)
+app.use("/api/admin", authenticate, authorize(['admin']), createProxyMiddleware(createProxy(SERVICES.ADMIN, '/admin')));
 
 // ===== GLOBAL ERROR HANDLING =====
 app.use(errorMiddleware as any);
 
 // Catch 404
 app.use((req: Request, res: Response) => {
+  console.log(` Route Not Found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ success: false, message: `Route ${req.method} ${req.path} not found` });
 });
 

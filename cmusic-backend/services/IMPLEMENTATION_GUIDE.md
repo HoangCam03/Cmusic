@@ -1,7 +1,7 @@
 # 🛠️ Hướng Dẫn Implementation Microservices
 
 ## Tình trạng hiện tại
-✅ **Hoàn thành:**
+ **Hoàn thành:**
 - Folder structure cho 8 services + 1 gateway
 - Basic server setup cho tất cả services
 - API Gateway với routing cơ bản

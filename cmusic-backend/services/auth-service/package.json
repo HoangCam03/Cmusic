@@ -17,14 +17,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@spotify/libs": "file:../../libs",
+    "@types/nodemailer": "^7.0.11",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.14.3",
-    "zod": "^4.3.6",
-    "@spotify/libs": "file:../../libs"
+    "nodemailer": "^8.0.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

@@ -5,16 +5,22 @@ import { registerSchema, loginSchema } from '../validators/auth.validator';
 
 const router = Router();
 
-// /auth/register
+// POST /auth/register → Đăng ký + gửi OTP
 router.post('/register', validate(registerSchema), authController.register as any);
 
-// /auth/login
+// POST /auth/login → Đăng nhập
 router.post('/login', validate(loginSchema), authController.login as any);
 
-// /auth/refresh
+// POST /auth/verify-email → Xác thực OTP (body-based)
+router.post('/verify-email', authController.verifyEmail as any);
+
+// POST /auth/resend-otp → Gửi lại OTP
+router.post('/resend-otp', authController.resendOtp as any);
+
+// POST /auth/refresh
 router.post('/refresh', authController.refresh as any);
 
-// /auth/logout
+// POST /auth/logout
 router.post('/logout', authController.logout as any);
 
 export default router;

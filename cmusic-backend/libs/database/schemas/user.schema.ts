@@ -7,6 +7,31 @@ export interface IUser extends Document {
   displayName: string;
   avatarUrl?: string;
   role: 'user' | 'artist' | 'admin';
+  
+  // Authentication Nâng cao
+  authProvider: 'local' | 'google' | 'facebook' | 'apple';
+  providerId?: string;
+  isEmailVerified: boolean;
+  verificationToken?: string;
+  verificationTokenExpires?: Date;
+  lastLogin?: Date;
+  
+  // Thông tin Cá nhân hóa
+  dateOfBirth?: Date;
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  country?: string;
+  
+  // Gói cước (Monetization)
+  plan: 'free' | 'student' | 'premium' | 'family';
+  premiumExpiresAt?: Date;
+  
+  // Cấu hình (Preferences)
+  preferences: {
+    language: string;
+    theme: 'light' | 'dark' | 'system';
+    emailNotifications: boolean;
+  };
+  
   createdAt: Date;
   updatedAt: Date;
   comparePassword(password: string): Promise<boolean>;
@@ -15,10 +40,34 @@ export interface IUser extends Document {
 const UserSchema: Schema = new Schema(
   {
     email: { type: String, required: true, unique: true, index: true },
-    password: { type: String, required: true },
+    password: { type: String }, // Không bắt buộc nữa để hỗ trợ Đăng nhập Google/Apple
     displayName: { type: String, required: true },
     avatarUrl: { type: String },
     role: { type: String, enum: ['user', 'artist', 'admin'], default: 'user' },
+    
+    // Authentication Nâng cao
+    authProvider: { type: String, enum: ['local', 'google', 'facebook', 'apple'], default: 'local' },
+    providerId: { type: String },
+    isEmailVerified: { type: Boolean, default: false },
+    verificationToken: { type: String },
+    verificationTokenExpires: { type: Date },
+    lastLogin: { type: Date },
+    
+    // Thông tin Cá nhân hóa
+    dateOfBirth: { type: Date },
+    gender: { type: String, enum: ['male', 'female', 'other', 'prefer_not_to_say'] },
+    country: { type: String, default: 'VN' }, // Mặc định là Việt Nam
+    
+    // Gói cước (Monetization)
+    plan: { type: String, enum: ['free', 'student', 'premium', 'family'], default: 'free' },
+    premiumExpiresAt: { type: Date },
+    
+    // Cấu hình (Preferences)
+    preferences: {
+      language: { type: String, default: 'vi' },
+      theme: { type: String, enum: ['light', 'dark', 'system'], default: 'dark' },
+      emailNotifications: { type: Boolean, default: true }
+    }
   },
   { timestamps: true }
 );

@@ -199,6 +199,55 @@ class AuthController {
       next(error);
     }
   }
+
+  // 5. Đổi mật khẩu
+  public async changePassword(req: any, res: Response, next: NextFunction) {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const userId = req.user.userId;
+
+      const user = await User.findById(userId);
+      if (!user) throw new AuthError('Người dùng không tồn tại');
+
+      // Kiểm tra mật khẩu cũ
+      const isMatch = await user.comparePassword(oldPassword);
+      if (!isMatch) throw new AuthError('Mật khẩu cũ không chính xác');
+
+      // Cập nhật mật khẩu mới
+      user.password = newPassword;
+      await user.save();
+
+      return res.json(new SuccessResponse('Đổi mật khẩu thành công', null));
+    } catch (error) {
+      next(error);
+    }
+  }
+  // 6. Nâng cấp gói cước (Monetization Simulation)
+  public async upgradePlan(req: any, res: Response, next: NextFunction) {
+    try {
+      const { plan } = req.body;
+      const userId = req.headers['x-user-id']; // Lấy từ Gateway
+      
+      if (!userId) throw new AuthError('Vui lòng đăng nhập để thực hiện');
+      if (!['student', 'premium', 'family'].includes(plan)) {
+        throw new Error('Gói cước không hợp lệ');
+      }
+
+      // Mô phỏng việc gia hạn 30 ngày
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 30);
+
+      const user = await User.findByIdAndUpdate(
+        userId, 
+        { plan, premiumExpiresAt: expiryDate }, 
+        { new: true }
+      ).select('-password');
+
+      return res.json(new SuccessResponse(`Nâng cấp lên gói ${plan.toUpperCase()} thành công!`, user));
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();

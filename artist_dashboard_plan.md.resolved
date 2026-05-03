@@ -1,0 +1,95 @@
+# 🎤 Kế hoạch Tối ưu Hóa Chức năng Nghệ sĩ
+
+## Phân tích Hiện trạng
+
+Hiện tại, tất cả người dùng có role `artist` hoặc `admin` đều truy cập vào cùng một bộ trang `/admin/*`. Vấn đề là **chưa có sự phân quyền ở cấp dữ liệu** — một nghệ sĩ có thể xem/xóa bài hát của nghệ sĩ khác.
+
+---
+
+## 🗺️ Lộ trình Triển khai (Ưu tiên theo độ ảnh hưởng)
+
+### Phase 1 — Bảo mật Backend (Quan trọng nhất ✅)
+> Thêm ownership check vào các API liên quan đến bài hát
+
+| Vấn đề | Vị trí | Giải pháp |
+|--------|--------|-----------|
+| Artist xóa được bài của người khác | `catalog.controller.ts::deleteTrack` | Check `artistId === x-user-id` |
+| Artist sửa được bài của người khác | `catalog.controller.ts::updateTrack` | Check `artistId === x-user-id` hoặc role=admin |
+| Artist thấy toàn bộ bài hát trong trang quản lý | `catalog.controller.ts::getTracks` | Thêm filter `?mine=true` khi role=artist |
+
+### Phase 2 — Trang Artist Studio (Frontend)
+> Tạo trang `/artist-studio` riêng biệt thay vì dùng chung admin panel
+
+**Các tính năng cần có:**
+- 📊 Dashboard thống kê cá nhân (tổng lượt nghe, tổng bài hát, followers)
+- 🎵 Danh sách bài hát **chỉ của mình** với các nút Sửa/Xóa
+- 📤 Nút tải nhạc lên nhanh
+- 📀 Quản lý Album của mình
+- ✏️ Chỉnh sửa hồ sơ nghệ sĩ (bio, ảnh đại diện, ảnh bìa)
+- 📈 Biểu đồ lượt nghe theo thời gian *(nâng cao)*
+
+### Phase 3 — Hồ sơ Nghệ sĩ Được liên kết với Tài khoản
+> Liên kết `User._id` ↔ `Artist._id` để quản lý đúng bài hát
+
+**Vấn đề hiện tại:** Track lưu `artistId` là `User._id`, nhưng `Artist` profile là model riêng biệt. Cần:
+- Thêm field `userId: ObjectId` vào `Artist` schema để biết user nào sở hữu hồ sơ nghệ sĩ nào
+- Khi user có role `artist`, tự động tìm và hiển thị `Artist` profile của họ
+
+### Phase 4 — UX Cải thiện
+- Route guard: Điều hướng artist đến `/artist-studio` thay vì `/admin`
+- Thanh điều hướng trong admin layout ẩn các mục chỉ dành cho admin (Người dùng, Phân quyền)
+- Toast thông báo rõ ràng khi thao tác thành công/thất bại
+
+---
+
+## 🚀 Bắt đầu từ đâu?
+
+> **Tôi đề xuất thực hiện theo thứ tự sau:**
+
+```
+1. Thêm ownership check vào Backend (30 phút) → An toàn ngay
+2. Tạo ArtistStudioPage.tsx với danh sách bài hát của mình (1 giờ)  
+3. Thêm route /artist-studio vào App.tsx + Route guard (15 phút)
+4. Liên kết Artist profile ↔ User account (30 phút)
+```
+
+---
+
+## Chi tiết Kỹ thuật
+
+### Backend: Ownership Check trong `updateTrack` và `deleteTrack`
+
+```typescript
+// Trong catalog.controller.ts
+const userId = req.headers['x-user-id'] as string;
+const userRole = req.headers['x-user-role'] as string;
+const track = await Track.findById(trackId);
+
+if (userRole !== 'admin' && track.artistId.toString() !== userId) {
+  return res.status(403).json({ success: false, message: 'Bạn không có quyền chỉnh sửa bài hát này' });
+}
+```
+
+### Backend: Filter bài hát "của mình" trong `getTracks`
+
+```typescript
+// Thêm query parameter ?mine=true
+if (req.query.mine === 'true') {
+  query.artistId = userId;
+}
+```
+
+### Frontend: API call cho Artist Studio
+
+```typescript
+// Chỉ lấy bài hát của mình
+const res = await api.get('/catalog/tracks?mine=true');
+```
+
+### Frontend: Kiểm tra role để hiển thị đúng navigation
+
+```typescript
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+const isArtist = user.role === 'artist';
+const isAdmin = user.role === 'admin';
+```

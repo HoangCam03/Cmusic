@@ -14,7 +14,8 @@ import {
   faApple, 
   faXTwitter 
 } from "@fortawesome/free-brands-svg-icons";
-import axios from "axios";
+import { userLogin } from "../services/UserLogin/UserLoginService";
+
 
 // Logo CMusic Premium
 const CMusicLogo = () => (
@@ -55,6 +56,10 @@ const MusicalNotes = () => (
     </div>
 );
 
+import { useAppDispatch } from "../store/store";
+import { clearPlaylists, fetchPlaylists } from "../store/slices/playlistSlice";
+import { useEffect } from "react";
+
 export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
@@ -62,6 +67,15 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+
+  // Đảm bảo mọi phiên đăng nhập cũ đều bị xoá sạch khi truy cập trang Login
+  useEffect(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    dispatch(clearPlaylists());
+  }, [dispatch]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,26 +83,16 @@ export const LoginPage: React.FC = () => {
     setError("");
 
     try {
-      const response = await axios.post("http://localhost:3000/api/auth/login", {
-        email,
-        password,
-      });
+      const result = await userLogin(email, password);
 
-      if (response.data && response.data.success) {
-        const { accessToken, refreshToken, user } = response.data.data || {};
-        
-        localStorage.setItem("token", accessToken);
-        localStorage.setItem("refreshToken", refreshToken);
-        localStorage.setItem("user", JSON.stringify(user));
-        
-        if (user.role === "admin") {
-          navigate("/admin");
-        } else {
-          navigate("/");
-        }
+      if (result && result.success) {
+        // Lấy ngay dữ liệu của user mới
+        dispatch(fetchPlaylists());
+        navigate("/");
       } else {
-        setError(response.data?.message || "Đăng nhập không thành công.");
+        setError(result?.message || "Đăng nhập không thành công.");
       }
+
     } catch (err: any) {
       setError(err.response?.data?.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại!");
     } finally {

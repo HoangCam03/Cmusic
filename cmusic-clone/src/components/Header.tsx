@@ -7,12 +7,17 @@ import {
   faCog, 
   faUser, 
   faStar, 
-  faSignOutAlt 
+  faSignOutAlt,
+  faMicrophone 
 } from "@fortawesome/free-solid-svg-icons";
+import { useAppDispatch } from "../store/store";
+import { clearPlaylists } from "../store/slices/playlistSlice";
+import NotificationBell from "./NotificationBell";
 
 export function Header() {
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -36,6 +41,7 @@ export function Header() {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
+    dispatch(clearPlaylists());
     setIsLoggedIn(false);
     setShowDropdown(false);
     navigate("/login");
@@ -81,13 +87,22 @@ export function Header() {
 
       {/* Right: Nav Links + Login */}
       <div className="flex items-center gap-6">
-        <Link
-          to="/admin"
-          className="hidden lg:flex items-center gap-2 text-[#a1a1aa] hover:text-white text-[13px] font-medium transition-colors"
-        >
-          <FontAwesomeIcon icon={faCog} className="w-3.5 h-3.5" />
-          Quản trị
-        </Link>
+        {isLoggedIn && (user.role === "admin" || user.role === "artist") && (
+          <Link
+            to={user.role === "admin" ? "/admin" : "/admin/studio"}
+            className="hidden lg:flex items-center gap-2 bg-white/[0.03] hover:bg-white/10 border border-white/5 hover:border-purple-500/30 px-4 py-2 rounded-full text-[#a1a1aa] hover:text-white text-[13px] font-medium transition-all duration-300"
+          >
+            <FontAwesomeIcon 
+              icon={user.role === "admin" ? faCog : faMicrophone} 
+              className={`w-3.5 h-3.5 ${user.role === "admin" ? "text-purple-500" : "text-[#ff2d55]"}`} 
+            />
+            <span>{user.role === "admin" ? "Quản trị hệ thống" : "Artist Studio"}</span>
+          </Link>
+        )}
+
+
+
+        {isLoggedIn && <NotificationBell />}
 
         <a
           href="#"
@@ -118,20 +133,25 @@ export function Header() {
               onClick={() => setShowDropdown(!showDropdown)}
               className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-medium shadow-lg border-2 border-white/10 hover:scale-105 transition-all cursor-pointer overflow-hidden"
             >
-              {user.avatar ? (
+            {user.avatar ? (
                 <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                user.username?.charAt(0).toUpperCase() || "U"
+                user.displayName?.charAt(0).toUpperCase() || "U"
               )}
+
             </button>
 
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className="absolute right-0 mt-3 w-56 bg-[#09090b]/90 backdrop-blur-3xl border border-white/5 rounded-2xl shadow-2xl py-1.5 z-[100] animate-in fade-in zoom-in duration-200">
-                <div className="px-4 py-3 border-b border-white/5 mb-1 text-white">
-                  <p className="text-[14px] font-semibold truncate tracking-tight">{user.username || "User"}</p>
-                  <p className="text-[11px] text-zinc-500 truncate mt-0.5 font-light tracking-wide">{user.email}</p>
+              <div className="absolute right-0 mt-3 w-64 bg-[#09090b] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] py-2 z-[100] animate-in fade-in zoom-in duration-200">
+                <div className="px-5 py-4 border-b border-white/5 mb-1">
+                  <p className="text-[10px] font-bold text-purple-500 tracking-[0.2em] uppercase mb-2">Tài khoản</p>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-[15px] font-bold text-white truncate tracking-tight">{user.displayName || "Người dùng CMusic"}</p>
+                    <p className="text-[12px] text-zinc-400 truncate font-medium">{user.email}</p>
+                  </div>
                 </div>
+
                 
                 <button className="w-full flex items-center justify-between px-4 py-2.5 text-zinc-400 hover:text-white hover:bg-white/[0.03] transition-all text-[13px] font-normal group">
                   <div className="flex items-center gap-3">
@@ -139,6 +159,18 @@ export function Header() {
                     Hồ sơ
                   </div>
                 </button>
+
+                {user.role === "artist" && (
+                  <button 
+                    onClick={() => { navigate("/admin/studio"); setShowDropdown(false); }}
+                    className="w-full flex items-center justify-between px-4 py-2.5 text-zinc-400 hover:text-white hover:bg-white/[0.03] transition-all text-[13px] font-normal group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FontAwesomeIcon icon={faMicrophone} className="w-3.5 h-3.5 text-[#ff2d55]" />
+                      Artist Studio
+                    </div>
+                  </button>
+                )}
 
                 <button className="w-full flex items-center justify-between px-4 py-2.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/5 transition-all text-[13px] font-medium group">
                   <div className="flex items-center gap-3">

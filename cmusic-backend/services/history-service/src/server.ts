@@ -1,7 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { mongoose } from "@spotify/libs/database";
 
 dotenv.config();
 
@@ -28,19 +28,15 @@ const connectDatabase = async () => {
 
 // ===== ROUTES =====
 
-// Health check
+import historyRoutes from "./routes/history.routes";
+
+// ... health check ...
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "OK", service: "history-service" });
 });
 
-// History routes placeholder
-app.post("/history/play", (req: Request, res: Response) => {
-  res.json({ message: "Record play event endpoint" });
-});
-
-app.get("/history/recently-played", (req: Request, res: Response) => {
-  res.json({ message: "Get recently played endpoint" });
-});
+// History routes
+app.use("/", historyRoutes);
 
 // ===== START SERVER =====
 const startServer = async () => {

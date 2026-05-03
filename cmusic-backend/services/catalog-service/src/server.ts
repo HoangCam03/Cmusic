@@ -1,9 +1,10 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { mongoose } from "@spotify/libs/database";
 import catalogRoutes from "./routes/catalog.routes";
 import { errorMiddleware } from "@spotify/libs/middleware/error.middleware";
+
 
 dotenv.config();
 
@@ -12,21 +13,24 @@ const PORT = parseInt(process.env.CATALOG_SERVICE_PORT || "3003", 10);
 
 // ===== MIDDLEWARE =====
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // ===== DATABASE CONNECTION =====
 const connectDatabase = async () => {
+  const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/cmusic";
+  console.log(`[CATALOG] Đang kết nối tới MongoDB: ${uri}`);
   try {
-    await mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/spotify");
-    console.log(" MongoDB kết nối thành công (Catalog Service)");
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 5000, // Timeout sau 5s nếu không thấy Server
+    });
+    console.log(" [CATALOG] MongoDB kết nối thành công");
   } catch (error) {
-    console.error(
-      " Lỗi kết nối MongoDB:",
-      error instanceof Error ? error.message : error
-    );
+    console.error(" [CATALOG] Lỗi kết nối MongoDB:", error);
     process.exit(1);
   }
 };
+
 
 // ===== ROUTES =====
 
@@ -45,9 +49,9 @@ app.use(errorMiddleware as any);
 const startServer = async () => {
   await connectDatabase();
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(
-      ` Catalog Service đang chạy tại http://localhost:${PORT} (${process.env.NODE_ENV})`
+      ` Catalog Service đang chạy tại http://0.0.0.0:${PORT} (${process.env.NODE_ENV})`
     );
   });
 };

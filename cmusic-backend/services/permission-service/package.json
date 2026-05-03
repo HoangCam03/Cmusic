@@ -1,0 +1,30 @@
+{
+  "name": "cmusic-permission-service",
+  "version": "1.0.0",
+  "description": "Permission Service - RBAC, Role permissions, Plan features",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node --experimental-specifier-resolution=node dist/services/permission-service/src/server.js",
+    "seed": "tsx src/seeds/permission.seed.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["microservice", "permissions", "rbac"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@spotify/libs": "file:../../libs",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "mongoose": "^8.14.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.7.0",
+    "typescript": "^5.5.4"
+  }
+}

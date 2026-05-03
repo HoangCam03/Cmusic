@@ -7,6 +7,9 @@ export interface IUser extends Document {
   displayName: string;
   avatarUrl?: string;
   role: 'user' | 'artist' | 'admin';
+  bio?: string;
+  followerCount?: number;
+  monthlyListeners?: number;
   
   // Authentication Nâng cao
   authProvider: 'local' | 'google' | 'facebook' | 'apple';
@@ -44,6 +47,9 @@ const UserSchema: Schema = new Schema(
     displayName: { type: String, required: true },
     avatarUrl: { type: String },
     role: { type: String, enum: ['user', 'artist', 'admin'], default: 'user' },
+    bio: { type: String },
+    followerCount: { type: Number, default: 0 },
+    monthlyListeners: { type: Number, default: 0 },
     
     // Authentication Nâng cao
     authProvider: { type: String, enum: ['local', 'google', 'facebook', 'apple'], default: 'local' },

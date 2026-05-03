@@ -1,15 +1,15 @@
-version: "3.8"
 
 services:
   mongodb:
     image: mongo:latest
     container_name: cmusic-mongodb
+    restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin123
     ports:
       - "27017:27017"
-    volumes:
+    volumes: 
       - mongodb_data:/data/db
     networks:
       - cmusic-network
@@ -25,8 +25,9 @@ services:
       - NODE_ENV=development
       - GATEWAY_PORT=3000
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
-      - JWT_SECRET=your_jwt_secret_key_here
-      - REFRESH_TOKEN_SECRET=your_refresh_token_secret_here
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3010
     depends_on:
       - mongodb
     networks:
@@ -45,8 +46,10 @@ services:
       - NODE_ENV=development
       - AUTH_SERVICE_PORT=3001
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
-      - JWT_SECRET=your_jwt_secret_key_here
-      - REFRESH_TOKEN_SECRET=your_refresh_token_secret_here
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_ACCESS_EXPIRE=15m
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+      - JWT_REFRESH_EXPIRE=30d
     depends_on:
       - mongodb
     networks:
@@ -63,6 +66,8 @@ services:
       - NODE_ENV=development
       - USER_SERVICE_PORT=3002
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
     depends_on:
       - mongodb
     networks:
@@ -75,10 +80,13 @@ services:
     container_name: cmusic-catalog-service
     ports:
       - "3003:3003"
+    env_file:
+      - ./catalog-service/.env
     environment:
       - NODE_ENV=development
-      - CATALOG_SERVICE_PORT=3003
-      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3010
     depends_on:
       - mongodb
     networks:
@@ -92,9 +100,14 @@ services:
     ports:
       - "3004:3004"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=development 
       - PLAYLIST_SERVICE_PORT=3004
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+      - CLOUDINARY_CLOUD_NAME=dl3kqa0oy
+      - CLOUDINARY_API_KEY=365641639148188
+      - CLOUDINARY_API_SECRET=xd5Lvk-Gjy7DNjo61tgIieSr2kA
     depends_on:
       - mongodb
     networks:
@@ -111,6 +124,8 @@ services:
       - NODE_ENV=development
       - LIKES_SERVICE_PORT=3005
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
     depends_on:
       - mongodb
     networks:
@@ -127,6 +142,8 @@ services:
       - NODE_ENV=development
       - HISTORY_SERVICE_PORT=3006
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
     depends_on:
       - mongodb
     networks:
@@ -143,6 +160,8 @@ services:
       - NODE_ENV=development
       - SEARCH_SERVICE_PORT=3007
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
     depends_on:
       - mongodb
     networks:
@@ -158,6 +177,42 @@ services:
     environment:
       - NODE_ENV=development
       - ADMIN_SERVICE_PORT=3008
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+    depends_on:
+      - mongodb
+    networks:
+      - cmusic-network
+
+  permission-service:
+    build:
+      context: ../
+      dockerfile: services/permission-service/Dockerfile
+    container_name: cmusic-permission-service
+    ports:
+      - "3009:3009"
+    environment:
+      - NODE_ENV=development
+      - PERMISSION_SERVICE_PORT=3009
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
+      - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+    depends_on:
+      - mongodb
+    networks:
+      - cmusic-network
+
+  notification-service:
+    build:
+      context: ../
+      dockerfile: services/notification-service/Dockerfile
+    container_name: cmusic-notification-service
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=development
+      - PORT=3010
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
     depends_on:
       - mongodb

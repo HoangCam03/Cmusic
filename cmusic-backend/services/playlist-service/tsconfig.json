@@ -19,6 +19,7 @@
     "baseUrl": "../../",
     "paths": {
       "@/*": ["services/playlist-service/src/*"],
+      "@spotify/libs": ["libs/index.ts"],
       "@spotify/libs/*": ["libs/*"]
     }
   },

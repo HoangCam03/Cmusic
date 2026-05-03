@@ -1,7 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { mongoose } from "@spotify/libs/database";
 
 dotenv.config();
 
@@ -11,6 +11,12 @@ const PORT = parseInt(process.env.LIKES_SERVICE_PORT || "3005", 10);
 // ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
+
+// Logger
+app.use((req, res, next) => {
+  console.log(`[LIKES-SERVICE]: ${req.method} ${req.path}`);
+  next();
+});
 
 // ===== DATABASE CONNECTION =====
 const connectDatabase = async () => {
@@ -28,23 +34,15 @@ const connectDatabase = async () => {
 
 // ===== ROUTES =====
 
-// Health check
+import likesRoutes from "./routes/likes.routes";
+
+// ... health check ...
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "OK", service: "likes-service" });
 });
 
-// Likes routes placeholder
-app.post("/likes/tracks/:trackId", (req: Request, res: Response) => {
-  res.json({ message: "Like track endpoint" });
-});
-
-app.delete("/likes/tracks/:trackId", (req: Request, res: Response) => {
-  res.json({ message: "Unlike track endpoint" });
-});
-
-app.get("/likes/tracks", (req: Request, res: Response) => {
-  res.json({ message: "Get liked tracks endpoint" });
-});
+// Likes routes
+app.use("/", likesRoutes);
 
 // ===== START SERVER =====
 const startServer = async () => {

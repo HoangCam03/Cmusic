@@ -1,11 +1,12 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { getAllPlaylists } from "../../services/PlaylistServices/ListPlaylists";
+import { getMyPlaylists, createPlaylist } from "../../services/PlaylistServices/ListPlaylists";
 
 interface Playlist {
   _id: string;
   name: string;
-  image: string;
-  type: "personal" | "system";
+  thumbnail: string;
+  userId: string;
+  tracks: string[];
   [key: string]: any;
 }
 
@@ -29,23 +30,22 @@ export const fetchPlaylists = createAsyncThunk(
   "playlists/fetchPlaylists",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await getAllPlaylists();
-      console.log("Redux fetchPlaylists response:", response);
-
-      if ((response as any).status === "error") {
-        if ((response as any).message === "Authentication failed") {
-          return {
-            status: "success",
-            message: "Fetched system playlists only",
-            playlists: (response as any).playlists?.filter((p: any) => p.type === "system") || [],
-          };
-        }
-        return rejectWithValue((response as any).message);
-      }
-
-      return response;
+      const response = await getMyPlaylists();
+      // Backend trả về { success: true, data: [...] }
+      return response.data;
     } catch (error: any) {
-      console.error("Error in fetchPlaylists:", error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const createNewPlaylist = createAsyncThunk(
+  "playlists/createNewPlaylist",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await createPlaylist();
+      return response.data;
+    } catch (error: any) {
       return rejectWithValue(error.message);
     }
   }
@@ -56,8 +56,7 @@ const playlistSlice = createSlice({
   initialState,
   reducers: {
     clearPlaylists: (state) => {
-      const systemPlaylists = state.items.data.filter((p) => p.type === "system");
-      state.items.data = systemPlaylists;
+      state.items.data = [];
       state.items.status = "idle";
       state.items.error = null;
     },
@@ -66,36 +65,17 @@ const playlistSlice = createSlice({
     builder
       .addCase(fetchPlaylists.pending, (state) => {
         state.items.status = "loading";
-        state.items.error = null;
       })
-      .addCase(fetchPlaylists.fulfilled, (state, action: PayloadAction<any>) => {
+      .addCase(fetchPlaylists.fulfilled, (state, action: PayloadAction<Playlist[]>) => {
         state.items.status = "succeeded";
-
-        if (action.payload && action.payload.playlists) {
-          const playlists: Playlist[] = action.payload.playlists;
-          const systemPlaylists = playlists.filter((p) => p.type === "system");
-          const personalPlaylists = playlists.filter((p) => p.type === "personal");
-
-          const existingSystemPlaylists = state.items.data.filter((p) => p.type === "system");
-          const finalSystemPlaylists = systemPlaylists.length > 0 ? systemPlaylists : existingSystemPlaylists;
-
-          state.items.data = [...finalSystemPlaylists, ...personalPlaylists];
-
-          console.log("Redux state updated:", {
-            systemPlaylists: finalSystemPlaylists,
-            personalPlaylists,
-            total: state.items.data.length,
-          });
-        } else {
-          console.error("Invalid playlist data structure:", action.payload);
-          state.items.data = state.items.data.filter((p) => p.type === "system");
-        }
+        state.items.data = action.payload;
       })
       .addCase(fetchPlaylists.rejected, (state, action) => {
         state.items.status = "failed";
-        state.items.error = (action.payload as string) || action.error.message || "Failed to fetch playlists";
-        state.items.data = state.items.data.filter((p) => p.type === "system");
-        console.error("Playlist fetch failed:", state.items.error);
+        state.items.error = action.payload as string;
+      })
+      .addCase(createNewPlaylist.fulfilled, (state, action: PayloadAction<Playlist>) => {
+        state.items.data.unshift(action.payload); // Thêm playlist mới lên đầu danh sách
       });
   },
 });

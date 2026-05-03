@@ -17,17 +17,51 @@ interface SongState {
   error: string | null;
 }
 
+const getInitialTrack = () => {
+  try {
+    const saved = localStorage.getItem('cmusic_current_track');
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+};
+
 const initialState: SongState = {
   items: [],
-  currentTrack: null,
+  currentTrack: getInitialTrack(),
   status: "idle",
   error: null,
 };
 
 export const fetchSongs = createAsyncThunk("songs/fetchSongs", async () => {
-  const response = await getAllSongs();
-  return response;
+  const result = await getAllSongs();
+
+  if (result && result.success && result.data && result.data.tracks) {
+    return result.data.tracks.map((track: any) => {
+      // Đảm bảo tương thích với mọi Component (SongCard, Player, v.v.)
+      const officialArtist = Array.isArray(track.officialArtistId) ? track.officialArtistId[0] : null;
+
+      return {
+        ...track,
+        name: track.title,
+        title: track.title,
+        artist: officialArtist?.name || track.artist || track.artistId?.displayName || "Nghệ sĩ CMusic",
+        artistAvatar: officialArtist?.avatarUrl || track.artistId?.avatarUrl || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500",
+        artistBio: officialArtist?.bio || track.artistId?.bio,
+        monthlyListeners: officialArtist?.stats?.monthlyListeners || track.artistId?.monthlyListeners || 1234567,
+        followerCount: officialArtist?.stats?.followerCount || track.artistId?.followerCount || 0,
+        file: track.audioUrl,
+        audioUrl: track.audioUrl,
+        image: track.coverUrl,
+        coverUrl: track.coverUrl,
+        coverImage: track.coverUrl,
+      };
+    });
+  }
+
+  return [];
 });
+
 
 const songSlice = createSlice({
   name: "songs",
@@ -35,6 +69,9 @@ const songSlice = createSlice({
   reducers: {
     setCurrentTrack: (state, action: PayloadAction<Song>) => {
       state.currentTrack = action.payload;
+      try {
+        localStorage.setItem('cmusic_current_track', JSON.stringify(action.payload));
+      } catch (e) { }
     },
   },
   extraReducers: (builder) => {

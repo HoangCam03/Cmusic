@@ -1,7 +1,9 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { mongoose } from "@spotify/libs/database";
+import { errorMiddleware } from "@spotify/libs/middleware/error.middleware";
+import userRoutes from "./routes/user.routes";
 
 dotenv.config();
 
@@ -16,12 +18,9 @@ app.use(express.json());
 const connectDatabase = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/spotify");
-    console.log(" MongoDB kết nối thành công");
+    console.log(" MongoDB kết nối thành công (user-service)");
   } catch (error) {
-    console.error(
-      " Lỗi kết nối MongoDB:",
-      error instanceof Error ? error.message : error
-    );
+    console.error(" Lỗi kết nối MongoDB:", error instanceof Error ? error.message : error);
     process.exit(1);
   }
 };
@@ -30,34 +29,41 @@ const connectDatabase = async () => {
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {
-  res.json({ status: "OK", service: "user-service" });
+  res.json({ status: "OK", service: "user-service", timestamp: new Date().toISOString() });
 });
 
-// User routes placeholder
-app.get("/users/:userId", (req: Request, res: Response) => {
-  res.json({ message: "Get user endpoint" });
+// User routes (prefix: /users)
+// Mount cả hai dạng để tương thích với Express 5 strict routing
+// Gateway có thể gửi /users hoặc /users/ tùy pathRewrite
+app.use("/users", userRoutes);
+app.use("/users/", userRoutes);
+
+// ===== 404 Handler (JSON - không dùng HTML mặc định của Express) =====
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.path} not found on user-service`,
+  });
 });
 
-app.get("/users/profile/:userId", (req: Request, res: Response) => {
-  res.json({ message: "Get profile endpoint" });
-});
+// ===== ERROR HANDLER =====
+app.use(errorMiddleware);
 
-app.put("/users/profile/:userId", (req: Request, res: Response) => {
-  res.json({ message: "Update profile endpoint" });
-});
-
-app.post("/users/:userId/follow", (req: Request, res: Response) => {
-  res.json({ message: "Follow user endpoint" });
-});
 
 // ===== START SERVER =====
 const startServer = async () => {
   await connectDatabase();
 
   app.listen(PORT, () => {
-    console.log(
-      `User Service đang chạy tại http://localhost:${PORT} (${process.env.NODE_ENV})`
-    );
+    console.log(` User Service đang chạy tại http://localhost:${PORT} (${process.env.NODE_ENV})`);
+    console.log(` Routes:`);
+    console.log(`   GET    /users          → Danh sách users (Admin)`);
+    console.log(`   GET    /users/me       → Profile bản thân`);
+    console.log(`   GET    /users/stats    → Thống kê (Admin)`);
+    console.log(`   GET    /users/:id      → Thông tin user (Admin)`);
+    console.log(`   PUT    /users/:id      → Cập nhật thông tin`);
+    console.log(`   PATCH  /users/:id/role → Phân quyền (Admin)`);
+    console.log(`   DELETE /users/:id      → Xóa user (Admin)`);
   });
 };
 

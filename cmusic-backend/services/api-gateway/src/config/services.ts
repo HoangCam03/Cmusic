@@ -10,4 +10,6 @@ export const SERVICES = {
   HISTORY: process.env.HISTORY_SERVICE_URL || 'http://history-service:3006',
   SEARCH: process.env.SEARCH_SERVICE_URL || 'http://search-service:3007',
   ADMIN: process.env.ADMIN_SERVICE_URL || 'http://admin-service:3008',
+  PERMISSION: process.env.PERMISSION_SERVICE_URL || 'http://permission-service:3009',
+  NOTIFICATION: process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3010',
 };

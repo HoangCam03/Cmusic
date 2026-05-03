@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
 import { validate } from '@spotify/libs/middleware/validation.middleware';
-import { registerSchema, loginSchema } from '../validators/auth.validator';
+import { authenticate } from '@spotify/libs/middleware/auth.middleware';
+import { registerSchema, loginSchema, changePasswordSchema } from '../validators/auth.validator';
 
 const router = Router();
 
@@ -22,5 +23,11 @@ router.post('/refresh', authController.refresh as any);
 
 // POST /auth/logout
 router.post('/logout', authController.logout as any);
+
+// POST /auth/change-password → Đổi mật khẩu (Yêu cầu đăng nhập)
+router.post('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword as any);
+
+// POST /auth/upgrade-plan → Nâng cấp gói cước
+router.post('/upgrade-plan', authController.upgradePlan as any);
 
 export default router;

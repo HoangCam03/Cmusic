@@ -1,73 +1,182 @@
-import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import api from "../services/api";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
-  faChartLine, 
+  faTableCellsLarge, 
+  faArrowUpFromBracket, 
   faMusic, 
-  faUsers, 
-  faCog, 
+  faUserGroup, 
+  faGear, 
+  faAngleLeft,
   faArrowLeft,
-  faCloudUploadAlt
+  faAngleRight,
+  faShieldHalved,
+  faMicrophone,
+  faCompactDisc
 } from "@fortawesome/free-solid-svg-icons";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-export function AdminLayout({ children }: AdminLayoutProps) {
+export const AdminLayout = ({ children }: AdminLayoutProps) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const verifyDashboardAccess = async () => {
+      try {
+        if (!token) {
+          navigate("/");
+          return;
+        }
+
+        // Chặn người dùng thường (role === "user") truy cập khu vực quản trị/nghệ sĩ
+        if (user?.role === "user") {
+          navigate("/");
+          return;
+        }
+        
+        // Chỉ Admin mới gọi stats hệ thống
+        if (user?.role === "admin") {
+          await api.get(`/admin/stats`);
+        }
+        
+        setIsCheckingAccess(false);
+      } catch (error: any) {
+        // Nếu trả về 403 Forbidden hoặc lỗi xác thực -> Đá ra
+        navigate("/");
+      }
+    };
+    verifyDashboardAccess();
+  }, [navigate, token, user?.role]);
+
+  const isAdmin = user?.role === "admin";
 
   const menuItems = [
-    { name: "Tổng quan", icon: faChartLine, path: "/admin" },
-    { name: "Tải nhạc lên", icon: faCloudUploadAlt, path: "/admin/upload" },
+    { 
+      name: isAdmin ? "Tổng quan" : "Artist Studio", 
+      icon: faTableCellsLarge, 
+      path: isAdmin ? "/admin" : "/admin/studio" 
+    },
+    { name: "Tải nhạc lên", icon: faArrowUpFromBracket, path: "/admin/upload" },
     { name: "Quản lý bài hát", icon: faMusic, path: "/admin/tracks" },
-    { name: "Người dùng", icon: faUsers, path: "/admin/users" },
-    { name: "Cài đặt", icon: faCog, path: "/admin/settings" },
+    { name: "Quản lý Album", icon: faCompactDisc, path: "/admin/albums" },
+    { name: "Quản lý Nghệ sĩ", icon: faMicrophone, path: "/admin/artists" },
+    ...(isAdmin ? [
+      { name: "Người dùng", icon: faUserGroup, path: "/admin/users" },
+      { name: "Phân quyền", icon: faShieldHalved, path: "/admin/permissions" },
+    ] : []),
+    { name: "Cài đặt", icon: faGear, path: "/admin/settings" },
   ];
 
+  if (isCheckingAccess) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
+         <div className="w-10 h-10 border-4 border-white/10 border-t-purple-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-[#09090b] text-[#a1a1aa] overflow-hidden">
-      {/* Admin Sidebar */}
-      <aside className="w-64 bg-[#18181b] border-r border-white/5 flex flex-col p-6">
-        <div className="flex items-center gap-3 mb-10 px-2">
-           <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg transform rotate-3">
-            <span className="text-white font-black text-sm italic leading-none">C</span>
+    <div className="flex h-screen bg-[#080808] text-[#a1a1aa] overflow-hidden font-inter antialiased selection:bg-white selection:text-black">
+      {/* Sidebar - Dynamically Sized */}
+      <aside 
+        className={`bg-[#080808] border-r border-white/[0.06] flex flex-col shadow-2xl relative z-20 transition-all duration-500 ease-in-out ${
+          isCollapsed ? "w-20" : "w-56"
+        }`}
+      >
+        {/* Logo Section */}
+        <div className={`flex items-center gap-3 py-5 border-b border-white/[0.06] mb-4 overflow-hidden transition-all duration-500 ${
+          isCollapsed ? "px-6" : "px-8"
+        }`}>
+           <div className="w-5 h-5 bg-white rounded flex-shrink-0 flex items-center justify-center">
+            <FontAwesomeIcon icon={faMusic} className="text-black text-[9px]" />
           </div>
-          <h1 className="text-white font-black text-lg tracking-tight uppercase">CMusic <span className="text-[10px] text-purple-400">Admin</span></h1>
+          {!isCollapsed && (
+            <h1 className="text-white font-bold text-[11px] tracking-[0.2em] uppercase whitespace-nowrap overflow-hidden">
+              CMUSIC <span className="text-zinc-600 font-medium ml-1">{isAdmin ? "ADMIN" : "STUDIO"}</span>
+            </h1>
+          )}
         </div>
 
-        <nav className="flex-1 space-y-2">
-          {menuItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-[13px] transition-all duration-300 ${
-                location.pathname === item.path 
-                ? "bg-white/5 text-white shadow-inner border border-white/5" 
-                : "hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <FontAwesomeIcon icon={item.icon} className={`w-4 h-4 ${location.pathname === item.path ? "text-purple-400" : ""}`} />
-              {item.name}
-            </Link>
-          ))}
+        {/* Menu Items */}
+        <nav className="flex-1 space-y-1 px-3">
+          {menuItems.map((item) => {
+            const isActive = location.pathname === item.path || (isAdmin && item.path === "/admin" && location.pathname === "/admin/tracks");
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                title={isCollapsed ? item.name : ""}
+                className={`flex items-center rounded-full transition-all duration-300 group ${
+                  isCollapsed ? "justify-center px-0 py-3" : "gap-3.5 px-4 py-2.5"
+                } ${
+                  isActive 
+                  ? "bg-[#e5e5e5] text-black" 
+                  : "text-zinc-500 hover:text-white"
+                }`}
+              >
+                <div className={`flex justify-center transition-colors ${
+                  isCollapsed ? "w-full" : "w-5"
+                } ${isActive ? 'text-black' : 'text-zinc-600 group-hover:text-white'}`}>
+                  <FontAwesomeIcon icon={item.icon} className="text-[15px]" />
+                </div>
+                {!isCollapsed && (
+                  <span className="text-[11px] font-bold tracking-tight whitespace-nowrap overflow-hidden">
+                    {item.name}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="mt-auto">
-          <Link to="/" className="flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-[13px] text-[#71717a] hover:text-white transition">
-            <FontAwesomeIcon icon={faArrowLeft} />
-            Về CMusic Player
+        {/* Bottom Section */}
+        <div className={`mt-auto border-t border-white/[0.06] space-y-2 py-6 transition-all duration-500 ${
+           isCollapsed ? "px-0" : "px-6"
+        }`}>
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className={`w-full flex items-center text-[11px] font-bold text-zinc-600 hover:text-white transition group ${
+              isCollapsed ? "justify-center" : "gap-3"
+            }`}
+          >
+            <div className={`flex justify-center ${isCollapsed ? "w-full" : "w-5"}`}>
+              <FontAwesomeIcon 
+                icon={isCollapsed ? faAngleRight : faAngleLeft} 
+                className={`text-[13px] transition-transform ${!isCollapsed && "group-hover:-translate-x-1"}`} 
+              />
+            </div>
+            {!isCollapsed && <span>Thu gọn</span>}
+          </button>
+          
+          <Link 
+            to="/" 
+            title={isCollapsed ? "Trình phát nhạc" : ""}
+            className={`w-full flex items-center text-[11px] font-bold text-zinc-600 hover:text-white transition group ${
+              isCollapsed ? "justify-center" : "gap-3"
+            }`}
+          >
+            <div className={`flex justify-center ${isCollapsed ? "w-full" : "w-5"}`}>
+              <FontAwesomeIcon icon={faArrowLeft} className={`text-[13px] transition-transform ${!isCollapsed && "group-hover:-translate-x-1"}`} />
+            </div>
+            {!isCollapsed && <span>Trình phát nhạc</span>}
           </Link>
         </div>
       </aside>
 
-      {/* Main Admin Area */}
-      <main className="flex-1 overflow-y-auto p-8 relative custom-scrollbar">
-         {/* Background soft glow */}
-         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500/5 blur-[120px] pointer-events-none" />
-         <div className="relative z-10">
-            {children}
-         </div>
+      {/* Content Area */}
+      <main className="flex-1 overflow-y-auto bg-[#050505] relative custom-scrollbar">
+        <div className="max-w-[1600px] mx-auto min-h-screen">
+          {children}
+        </div>
       </main>
     </div>
   );

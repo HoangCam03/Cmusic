@@ -16,13 +16,14 @@ import {
   faRotateRight,
   faCheckCircle,
 } from "@fortawesome/free-solid-svg-icons";
-import { 
-  faGoogle, 
-  faFacebookF, 
-  faApple, 
-  faXTwitter 
+import {
+  faGoogle,
+  faFacebookF,
+  faApple,
+  faXTwitter
 } from "@fortawesome/free-brands-svg-icons";
-import axios from "axios";
+import { userSignUp, verifyEmail, resendOtp } from "../services/UserSignUp/UserSignUp";
+
 
 
 // ── Input Field Component ──────────────────────────────────────────────────────
@@ -209,10 +210,10 @@ export const RegisterPage: React.FC = () => {
     if (form.password.length < 6) return setError("Mật khẩu phải có ít nhất 6 ký tự!");
     setLoading(true); setError("");
     try {
-      const res = await axios.post("http://localhost:3000/api/auth/register", {
+      const data = await userSignUp({
         email: form.email, password: form.password, displayName: form.displayName,
       });
-      if (res.data.success) {
+      if (data.success) {
         setStep("otp");
         resetCountdown(60);
       }
@@ -227,10 +228,8 @@ export const RegisterPage: React.FC = () => {
     if (otp.length < 6) { setOtpError(true); return; }
     setVerifying(true); setOtpError(false);
     try {
-      const res = await axios.post("http://localhost:3000/api/auth/verify-email", {
-        email: form.email, otp,
-      });
-      if (res.data.success) {
+      const data = await verifyEmail(form.email, otp);
+      if (data.success) {
         setStep("success");
       }
     } catch (err: any) {
@@ -244,8 +243,9 @@ export const RegisterPage: React.FC = () => {
   const handleResend = async () => {
     if (!canResend) return;
     try {
-      await axios.post("http://localhost:3000/api/auth/resend-otp", { email: form.email });
+      await resendOtp(form.email);
       setOtpDigits(Array(6).fill(""));
+
       resetCountdown(60);
     } catch (err: any) {
       // Nếu server báo lỗi throttle → reset đếm lại

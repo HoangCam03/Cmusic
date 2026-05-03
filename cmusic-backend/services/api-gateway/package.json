@@ -24,6 +24,7 @@
     "express-rate-limit": "^7.1.5",
     "http-proxy-middleware": "^3.0.5",
     "jsonwebtoken": "^9.0.3",
+    "socket.io": "^4.7.4",
     "@spotify/libs": "file:../../libs"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { mongoose } from "@spotify/libs";
 
 dotenv.config();
 
@@ -11,6 +11,7 @@ const PORT = parseInt(process.env.PLAYLIST_SERVICE_PORT || "3004", 10);
 // ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ===== DATABASE CONNECTION =====
 const connectDatabase = async () => {
@@ -27,32 +28,19 @@ const connectDatabase = async () => {
 };
 
 // ===== ROUTES =====
+import playlistRoutes from "./routes/playlist.routes";
+import { errorMiddleware } from "@spotify/libs/middleware/error.middleware";
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "OK", service: "playlist-service" });
 });
 
-// Playlist routes placeholder
-app.post("/playlists", (req: Request, res: Response) => {
-  res.json({ message: "Create playlist endpoint" });
-});
+// Playlist APIs
+app.use("/", playlistRoutes);
 
-app.get("/playlists/:playlistId", (req: Request, res: Response) => {
-  res.json({ message: "Get playlist endpoint" });
-});
-
-app.put("/playlists/:playlistId", (req: Request, res: Response) => {
-  res.json({ message: "Update playlist endpoint" });
-});
-
-app.delete("/playlists/:playlistId", (req: Request, res: Response) => {
-  res.json({ message: "Delete playlist endpoint" });
-});
-
-app.post("/playlists/:playlistId/tracks", (req: Request, res: Response) => {
-  res.json({ message: "Add track to playlist endpoint" });
-});
+// Error handling
+app.use(errorMiddleware as any);
 
 // ===== START SERVER =====
 const startServer = async () => {

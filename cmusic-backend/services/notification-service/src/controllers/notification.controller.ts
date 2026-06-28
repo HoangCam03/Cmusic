@@ -1,8 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
-
-// Lấy NotificationModel từ mongoose instance đã kết nối (được đăng ký trong server.ts)
-const getNotificationModel = () => mongoose.model('Notification');
+import { NotificationModel } from '../server';
 
 class NotificationController {
   // 1. Lấy danh sách thông báo của người dùng
@@ -11,8 +8,9 @@ class NotificationController {
       const userId = req.headers['x-user-id'];
       if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-      const Notification = getNotificationModel();
-      const notifications = await Notification.find({ recipientId: userId })
+      console.log(`[Notification Service] Fetching notifications for user: ${userId}`);
+      
+      const notifications = await NotificationModel.find({ recipientId: userId })
         .populate('senderId', 'displayName avatarUrl')
         .sort({ createdAt: -1 })
         .limit(50);
@@ -27,8 +25,7 @@ class NotificationController {
   public async markAsRead(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const Notification = getNotificationModel();
-      const notification = await Notification.findByIdAndUpdate(id, { isRead: true }, { new: true });
+      const notification = await NotificationModel.findByIdAndUpdate(id, { isRead: true }, { new: true });
       return res.json({ success: true, data: notification });
     } catch (error) {
       next(error);
@@ -39,8 +36,7 @@ class NotificationController {
   public async markAllAsRead(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.headers['x-user-id'];
-      const Notification = getNotificationModel();
-      await Notification.updateMany({ recipientId: userId, isRead: false }, { isRead: true });
+      await NotificationModel.updateMany({ recipientId: userId, isRead: false }, { isRead: true });
       return res.json({ success: true, message: 'Đã đánh dấu tất cả là đã đọc' });
     } catch (error) {
       next(error);
@@ -56,8 +52,7 @@ class NotificationController {
         return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc' });
       }
 
-      const Notification = getNotificationModel();
-      const notification = new Notification({
+      const notification = new NotificationModel({
         recipientId,
         senderId,
         type,
@@ -68,11 +63,17 @@ class NotificationController {
       });
 
       await notification.save();
+      
+      // Quan trọng: Populate thông tin người gửi trước khi gửi qua Socket
+      const populatedNotification = await NotificationModel.findById(notification._id)
+        .populate('senderId', 'displayName avatarUrl');
+
+      console.log(`[Notification Service] Created ${type} notification for user ${recipientId}`);
 
       // Gửi realtime qua Socket.io tới đúng user
-      if (req.io) {
-        req.io.to(recipientId.toString()).emit('notification', notification);
-        console.log(`[Socket] Notification sent to user ${recipientId}`);
+      if (req.io && populatedNotification) {
+        req.io.to(recipientId.toString()).emit('notification', populatedNotification);
+        console.log(`[Socket] Emitted populated notification to room: ${recipientId}`);
       }
 
       return res.status(201).json({ success: true, data: notification });

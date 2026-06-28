@@ -20,8 +20,15 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 
-// ===== ĐỊNH NGHĨA MODEL CỤC BỘ - Dùng mongoose instance của chính service này =====
-// Không import từ @spotify/libs/database vì nó dùng mongoose instance khác
+// ===== ĐỊNH NGHĨA MODELS CỤC BỘ =====
+const UserSchema = new Schema({
+  displayName: String,
+  avatarUrl: String
+});
+
+// Sử dụng mongoose.models để tránh lỗi duplicate khi hot reload
+const UserModel = mongoose.models['User'] || mongoose.model('User', UserSchema);
+
 const NotificationSchema = new Schema(
   {
     recipientId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -40,10 +47,9 @@ const NotificationSchema = new Schema(
   { timestamps: true }
 );
 
-// Đăng ký model (kiểm tra tránh duplicate khi hot reload)
-export const NotificationModel = mongoose.models['Notification']
-  ? mongoose.model('Notification')
-  : mongoose.model('Notification', NotificationSchema);
+const NotificationModel = mongoose.models['Notification'] || mongoose.model('Notification', NotificationSchema);
+
+export { UserModel, NotificationModel };
 
 // ===== KẾT NỐI DATABASE =====
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cmusic';

@@ -42,6 +42,7 @@ class HistoryController {
         .limit(limit)
         .populate({
           path: 'trackId',
+          match: { isDeleted: false }, // Thêm filter để không hiện bài đã xóa
           populate: [
             { path: 'artistId', select: 'displayName' },
             { path: 'officialArtistId', select: 'name avatarUrl' }
@@ -96,11 +97,55 @@ class HistoryController {
         History.countDocuments()
       ]);
 
+      const topArtistsAgg = await Track.aggregate([
+        { $match: { isDeleted: false } },
+        {
+          $project: {
+            artists: {
+              $map: {
+                input: { $split: ['$artist', ','] },
+                as: 'a',
+                in: { $trim: { input: '$$a' } }
+              }
+            },
+            playCount: 1
+          }
+        },
+        { $unwind: '$artists' },
+        {
+          $group: {
+            _id: '$artists',
+            plays: { $sum: '$playCount' },
+            tracks: { $sum: 1 }
+          }
+        },
+        { $sort: { plays: -1 } },
+        { $limit: 4 },
+        {
+          $project: {
+            _id: 0,
+            name: '$_id',
+            tracks: 1,
+            plays: 1
+          }
+        }
+      ]);
+
+      const topArtists = topArtistsAgg.map(a => ({
+        name: a.name,
+        tracks: a.tracks,
+        plays: a.plays >= 1000000 ? (a.plays / 1000000).toFixed(1) + 'M' : 
+               a.plays >= 1000 ? (a.plays / 1000).toFixed(1) + 'K' : a.plays.toString(),
+        avatar: a.name ? a.name.charAt(0).toUpperCase() : 'A',
+        avatarUrl: null
+      }));
+
       return res.json(new SuccessResponse('Lấy thống kê tổng quan thành công', {
         totalUsers,
         totalTracks,
         totalPlays: totalHistory,
-        growth: "+12.5%" // Placeholder cho growth logic
+        growth: "+12.5%", // Placeholder cho growth logic
+        topArtists
       }));
     } catch (error) {
       next(error);

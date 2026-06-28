@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { User } from '@spotify/libs/database/schemas/user.schema';
 import { Artist } from '@spotify/libs/database/schemas/artist.schema';
+import { ArtistRequest } from '@spotify/libs/database/schemas/artist-request.schema';
 import { AuthError } from '@spotify/libs/errors';
 import { SuccessResponse } from '@spotify/libs/response';
 
@@ -136,9 +137,15 @@ class UserController {
     try {
       const { userId } = req.params;
       const { 
-        displayName, avatarUrl, dateOfBirth, gender, 
+        displayName, dateOfBirth, gender, 
         country, preferences, plan, isEmailVerified 
       } = req.body;
+      
+      let avatarUrl = req.body.avatarUrl;
+      // Nếu có file upload lên, dùng url của file đó
+      if (req.file) {
+        avatarUrl = req.file.path;
+      }
 
       const isAdmin = req.user?.role === 'admin';
       const isSelf = req.user?.userId === userId;
@@ -161,6 +168,12 @@ class UserController {
       
       // Update Password if provided
       if (req.body.password) {
+        if (!isAdmin) {
+          return res.status(403).json({
+            success: false,
+            message: 'Vui lòng sử dụng tính năng Đổi Mật Khẩu chuyên dụng để thực hiện.',
+          });
+        }
         user.password = req.body.password;
       }
 
@@ -273,6 +286,121 @@ class UserController {
       if (!user) throw new AuthError('Không tìm thấy người dùng');
 
       return res.json(new SuccessResponse('Lấy thông tin cá nhân thành công', { user }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /users/artist-request — Gửi yêu cầu đăng ký nghệ sĩ
+   */
+  public async submitArtistRequest(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { stageName, bio, socialLinks, reason } = req.body;
+      const userId = req.user?.userId;
+
+      // Check if user already has a pending request
+      const existingRequest = await ArtistRequest.findOne({ userId, status: 'pending' });
+      if (existingRequest) {
+        return res.status(400).json({ success: false, message: 'Bạn đã có một yêu cầu đang chờ duyệt' });
+      }
+
+      // Check if user is already an artist
+      const user = await User.findById(userId);
+      if (user?.role === 'artist') {
+        return res.status(400).json({ success: false, message: 'Bạn đã là nghệ sĩ' });
+      }
+
+      const request = new ArtistRequest({
+        userId,
+        stageName,
+        bio,
+        socialLinks,
+        reason
+      });
+
+      await request.save();
+
+      return res.status(201).json(new SuccessResponse('Gửi yêu cầu đăng ký nghệ sĩ thành công', { request }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /users/artist-request/me — Lấy thông tin yêu cầu hiện tại của user
+   */
+  public async getMyArtistRequest(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const request = await ArtistRequest.findOne({ userId: req.user?.userId }).sort({ createdAt: -1 });
+      
+      return res.json(new SuccessResponse('Lấy yêu cầu thành công', { request }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /users/artist-requests — Lấy danh sách yêu cầu đăng ký nghệ sĩ (Admin only)
+   */
+  public async getArtistRequests(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { status } = req.query;
+      const filter: any = {};
+      if (status) filter.status = status;
+
+      const requests = await ArtistRequest.find(filter)
+        .populate('userId', 'email displayName avatarUrl')
+        .sort({ createdAt: -1 });
+
+      return res.json(new SuccessResponse('Lấy danh sách yêu cầu thành công', { requests }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /users/artist-requests/:id — Duyệt hoặc từ chối yêu cầu (Admin only)
+   */
+  public async updateArtistRequestStatus(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body; // 'approved' | 'rejected'
+
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Trạng thái không hợp lệ' });
+      }
+
+      const request = await ArtistRequest.findById(id).populate('userId');
+      if (!request) {
+        throw new AuthError('Không tìm thấy yêu cầu');
+      }
+
+      request.status = status;
+      await request.save();
+
+      if (status === 'approved') {
+        const user = await User.findById(request.userId);
+        if (user && user.role !== 'artist') {
+          user.role = 'artist';
+          await user.save();
+
+          // Create artist profile
+          const existingArtist = await Artist.findOne({ userId: user._id });
+          if (!existingArtist) {
+            await Artist.create({
+              name: request.stageName || user.displayName,
+              avatarUrl: user.avatarUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
+              bio: request.bio,
+              socials: request.socialLinks,
+              userId: user._id,
+              isVerified: false
+            });
+          }
+        }
+      }
+
+      return res.json(new SuccessResponse(`Đã ${status === 'approved' ? 'duyệt' : 'từ chối'} yêu cầu`, { request }));
     } catch (error) {
       next(error);
     }

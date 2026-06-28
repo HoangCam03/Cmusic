@@ -12,4 +12,5 @@ export const SERVICES = {
   ADMIN: process.env.ADMIN_SERVICE_URL || 'http://admin-service:3008',
   PERMISSION: process.env.PERMISSION_SERVICE_URL || 'http://permission-service:3009',
   NOTIFICATION: process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3010',
+  PAYMENT: process.env.PAYMENT_SERVICE_URL || 'http://payment-service:3011',
 };

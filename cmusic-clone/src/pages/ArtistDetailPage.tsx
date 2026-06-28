@@ -41,9 +41,15 @@ const ArtistDetailPage: React.FC = () => {
   const [tracks, setTracks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   useEffect(() => {
     const fetchArtistData = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        navigate("/signup");
+        return;
+      }
       try {
         setLoading(true);
         // 1. Fetch Artist Profile
@@ -160,16 +166,18 @@ const ArtistDetailPage: React.FC = () => {
           <FontAwesomeIcon icon={isCurrentArtistPlaying ? faPause : faPlay} className="text-xl ml-1" />
         </button>
 
-        <button 
-          onClick={handleFollowToggle}
-          className={`px-8 py-2.5 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all ${
-            isFollowing 
-            ? "bg-white text-black border-white" 
-            : "bg-transparent text-white border-white/20 hover:border-white"
-          }`}
-        >
-          {isFollowing ? "Đang theo dõi" : "Theo dõi"}
-        </button>
+        {(!currentUser._id || currentUser._id !== ((artist as any)?.userId?._id || (artist as any)?.userId || artist?._id)) && (
+          <button 
+            onClick={handleFollowToggle}
+            className={`px-8 py-2.5 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all ${
+              isFollowing 
+              ? "bg-white text-black border-white" 
+              : "bg-transparent text-white border-white/20 hover:border-white"
+            }`}
+          >
+            {isFollowing ? "Đang theo dõi" : "Theo dõi"}
+          </button>
+        )}
 
         <button className="text-zinc-500 hover:text-white transition-colors text-xl">
           <FontAwesomeIcon icon={faEllipsisH} />

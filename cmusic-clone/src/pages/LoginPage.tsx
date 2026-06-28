@@ -15,6 +15,7 @@ import {
   faXTwitter 
 } from "@fortawesome/free-brands-svg-icons";
 import { userLogin } from "../services/UserLogin/UserLoginService";
+import api from "../services/api";
 
 
 // Logo CMusic Premium
@@ -86,7 +87,12 @@ export const LoginPage: React.FC = () => {
       const result = await userLogin(email, password);
 
       if (result && result.success) {
-        // Lấy ngay dữ liệu của user mới
+        // Lấy thông tin user mới nhất từ server để đảm bảo plan được cập nhật
+        const userRes = await api.get("/users/me");
+        if (userRes.data.success) {
+          localStorage.setItem("user", JSON.stringify(userRes.data.data.user));
+        }
+
         dispatch(fetchPlaylists());
         navigate("/");
       } else {

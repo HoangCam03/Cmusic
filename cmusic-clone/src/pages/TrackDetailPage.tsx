@@ -9,10 +9,14 @@ import api from "../services/api";
 import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
+import { useSelector, useDispatch } from "react-redux";
+import { RootState, AppDispatch } from "../store/store";
+import { fetchPlaylists } from "../store/slices/playlistSlice";
 
 const TrackDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
   const ctx = useContext(PlayerContext);
   const [track, setTrack] = useState<any>(null);
   const [artistSongs, setArtistSongs] = useState<any[]>([]);
@@ -28,6 +32,25 @@ const TrackDetailPage: React.FC = () => {
   const [deleteModal, setDeleteModal] = useState({ show: false, commentId: null as string | null });
   const [isLiked, setIsLiked] = useState(false);
   const [recommendedSongs, setRecommendedSongs] = useState<any[]>([]);
+
+  // Playlist dropdown state
+  const [showPlaylistDropdown, setShowPlaylistDropdown] = useState(false);
+  const playlists = useSelector((state: RootState) => state.playlists.items.data);
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const userPlaylists = playlists?.filter((p: any) => p.userId === currentUser._id || p.userId?._id === currentUser._id) || [];
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.playlist-dropdown-container')) {
+        setShowPlaylistDropdown(false);
+      }
+    };
+    if (showPlaylistDropdown) {
+      document.addEventListener('click', handleClickOutside);
+    }
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showPlaylistDropdown]);
 
   const checkLikeStatus = async () => {
     try {
@@ -74,26 +97,14 @@ const TrackDetailPage: React.FC = () => {
 
   // Auto-scroll to active line
   useEffect(() => {
-    if (activeLineIndex >= 0 && lyricsRefs.current[activeLineIndex] && isAutoSync) {
+    if (activeLineIndex >= 0 && lyricsRefs.current[activeLineIndex] && isAutoSync && isExpanded) {
       lyricsRefs.current[activeLineIndex]?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
     }
-  }, [activeLineIndex, isAutoSync]);
+  }, [activeLineIndex, isAutoSync, isExpanded]);
 
-  // 2. Admin Studio States
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isSyncingSession, setIsSyncingSession] = useState(false);
-  const [syncedLines, setSyncedLines] = useState<{ [key: number]: number }>({}); // index -> timestamp
-
-  useEffect(() => {
-    const userJson = localStorage.getItem("user");
-    if (userJson) {
-      const user = JSON.parse(userJson);
-      setIsAdmin(user.role === 'admin' || user.role === 'artist');
-    }
-  }, []);
 
   // Parsing LRC format: [mm:ss.xx] Lyrics
   const parseLRC = (lrc: string) => {
@@ -120,8 +131,15 @@ const TrackDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (track?.lyrics) {
+    if (track?.syncedLyrics && track.syncedLyrics.length > 0) {
+      setParsedLyrics(track.syncedLyrics.map((line: any) => ({
+        time: line.start,
+        text: line.text
+      })));
+    } else if (track?.lyrics) {
       setParsedLyrics(parseLRC(track.lyrics));
+    } else {
+      setParsedLyrics([]);
     }
   }, [track]);
 
@@ -131,15 +149,21 @@ const TrackDetailPage: React.FC = () => {
     if (!audio || parsedLyrics.length === 0 || !isAutoSync) return;
 
     const onTimeUpdate = () => {
+      // Nếu bài hát đang xem (URL) khác với bài hát đang phát (Player), không highlight
+      if (ctx?.track?._id !== track?._id) {
+        if (activeLineIndex !== -1) setActiveLineIndex(-1);
+        return;
+      }
+
       const currentTime = audio.currentTime;
       const hasTimestamps = parsedLyrics.some(l => l.time !== -1);
       let index = -1;
 
       if (hasTimestamps) {
         for (let i = 0; i < parsedLyrics.length; i++) {
-          // Bù đắp một chút độ trễ 0.1s cho trải nghiệm mượt hơn
-          if (parsedLyrics[i].time !== -1 && (currentTime + 0.1) >= parsedLyrics[i].time) index = i;
-          else if (parsedLyrics[i].time > (currentTime + 0.1)) break;
+          // Bù đắp độ trễ bằng -0.6s giống y hệt LyricsOverlay để khớp 100%
+          if (parsedLyrics[i].time !== -1 && (currentTime - (-0.6)) >= parsedLyrics[i].time) index = i;
+          else if (parsedLyrics[i].time > (currentTime - (-0.6))) break;
         }
       } else if (track?.duration) {
         const timePerLine = track.duration / parsedLyrics.length;
@@ -153,49 +177,7 @@ const TrackDetailPage: React.FC = () => {
     return () => audio.removeEventListener('timeupdate', onTimeUpdate);
   }, [ctx?.audioRef, parsedLyrics, activeLineIndex, isAutoSync, track?.duration]);
 
-  // Handle Recording Sync (Admin Live Sync - With Reaction Offset)
-  const handleMarkLine = async (index: number) => {
-    if (!isSyncingSession || !ctx?.audioRef?.current) return;
-    
-    // Bù đắp phản xạ người dùng (thường nhanh hơn 0.3s)
-    const currentTime = Math.max(0, ctx.audioRef.current.currentTime - 0.25);
-    
-    setSyncedLines(prev => ({ ...prev, [index]: currentTime }));
 
-    // 2. Tự động tạo nội dung LRC mới và lưu vào DB luôn
-    try {
-      const updatedLines = { ...syncedLines, [index]: currentTime };
-      const lrcContent = parsedLyrics.map((line, idx) => {
-        const time = updatedLines[idx] !== undefined ? updatedLines[idx] : line.time;
-        if (time !== -1 && time !== undefined) {
-          const mins = Math.floor(time / 60).toString().padStart(2, '0');
-          const secs = Math.floor(time % 60).toString().padStart(2, '0');
-          const ms = Math.floor((time % 1) * 100).toString().padStart(2, '0');
-          return `[${mins}:${secs}.${ms}] ${line.text}`;
-        }
-        return line.text;
-      }).join('\n');
-
-      // Gửi PATCH lên server ngay lập tức
-      await api.patch(`/catalog/tracks/${id}`, { lyrics: lrcContent });
-      console.log(`✅ Đã lưu mốc thời gian cho dòng ${index + 1}`);
-    } catch (err) {
-      console.error("Lỗi lưu trực tiếp:", err);
-    }
-  };
-
-  // Space key handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && isSyncingSession) {
-        e.preventDefault();
-        const nextIndex = parsedLyrics.findIndex((_, idx) => syncedLines[idx] === undefined);
-        if (nextIndex !== -1) handleMarkLine(nextIndex);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSyncingSession, syncedLines, parsedLyrics]);
 
   const fetchComments = async () => {
     if (!id) return;
@@ -242,6 +224,12 @@ const TrackDetailPage: React.FC = () => {
 
   useEffect(() => {
     const fetchDetail = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        navigate("/signup");
+        return;
+      }
+
       if (!id) return;
       setLoading(true);
       setComments([]); // Reset comments to prevent old comments from showing
@@ -391,7 +379,47 @@ const TrackDetailPage: React.FC = () => {
           >
             <FontAwesomeIcon icon={faHeart} />
           </button>
-          <button className="text-zinc-400 hover:text-white transition-all text-xl"><FontAwesomeIcon icon={faEllipsis} /></button>
+          <div className="relative playlist-dropdown-container">
+            <button 
+              className="text-zinc-400 hover:text-white transition-all text-xl"
+              onClick={() => setShowPlaylistDropdown(!showPlaylistDropdown)}
+            >
+              <FontAwesomeIcon icon={faEllipsis} />
+            </button>
+            
+            {showPlaylistDropdown && (
+              <div className="absolute top-full left-0 mt-4 w-56 bg-[#282828] border border-white/10 rounded-lg shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-white/10">Thêm vào Playlist</div>
+                <div className="max-h-60 overflow-y-auto custom-scrollbar-hidden">
+                  {userPlaylists.length > 0 ? userPlaylists.map((playlist: any) => (
+                    <button
+                      key={playlist._id}
+                      onClick={async () => {
+                        const token = localStorage.getItem("token");
+                        if (!token) {
+                          navigate("/signup");
+                          return;
+                        }
+                        try {
+                          await api.post("/playlists/add-track", { playlistId: playlist._id, trackId: id });
+                          toast.success(`Đã thêm vào ${playlist.name}`);
+                          dispatch(fetchPlaylists());
+                          setShowPlaylistDropdown(false);
+                        } catch (err: any) {
+                          toast.error(err.response?.data?.message || "Bài hát đã có trong playlist này");
+                        }
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-zinc-200 hover:bg-white/10 transition-colors truncate"
+                    >
+                      {playlist.name}
+                    </button>
+                  )) : (
+                    <div className="px-4 py-4 text-xs text-zinc-500 italic text-center">Chưa có playlist nào</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Lyrics with Sync and Expand functionality */}
@@ -416,17 +444,70 @@ const TrackDetailPage: React.FC = () => {
           
           <div 
             className={`relative p-8 bg-zinc-900/40 rounded-3xl border border-white/5 font-outfit transition-all duration-700 overflow-hidden ${
-              (!isExpanded && !isSyncingSession) ? "max-h-[400px]" : "max-h-[10000px] shadow-[0_32px_64px_rgba(0,0,0,1)]"
+              !isExpanded ? "max-h-[400px]" : "max-h-[10000px] shadow-[0_32px_64px_rgba(0,0,0,1)]"
             }`}
           >
-            <div className="flex flex-col gap-5">
+            <div 
+              className="flex flex-col gap-5 transition-transform duration-700 ease-out"
+              style={{
+                 transform: (!isExpanded && isAutoSync) ? `translateY(-${Math.max(0, (Math.min(activeLineIndex, (!JSON.parse(localStorage.getItem("user") || "{}").plan || JSON.parse(localStorage.getItem("user") || "{}").plan === 'free') && JSON.parse(localStorage.getItem("lyricsViews") || '{"trackIds":[]}').trackIds?.length >= 2 && !JSON.parse(localStorage.getItem("lyricsViews") || '{"trackIds":[]}').trackIds?.includes(track?._id) ? 5 : parsedLyrics.length) - 2) * 80)}px)` : 'none'
+              }}
+            >
               {parsedLyrics.length > 0 ? (
                 parsedLyrics.map((line, index) => {
                   const isActive = activeLineIndex === index;
-                  const isRecorded = syncedLines[index] !== undefined;
                   
                   // Chỉ hiển thị highlight khi không click trống
-                  if (!line.text && !isSyncingSession) return <div key={index} className="h-8" />;
+                  if (!line.text) return <div key={index} className="h-8" />;
+
+                  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+                  const isPremium = currentUser.plan && currentUser.plan !== 'free';
+                  
+                  // Logic kiểm tra số lần xem trong ngày (tối đa 2 lần)
+                  const today = new Date().toISOString().split('T')[0];
+                  let lyricsViews = JSON.parse(localStorage.getItem("lyricsViews") || "{}");
+                  if (lyricsViews.date !== today) {
+                    lyricsViews = { date: today, trackIds: [] };
+                  }
+                  
+                  // Kiểm tra xem bài hát này đã được xem chưa
+                  let canViewFullLyrics = isPremium;
+                  if (!isPremium) {
+                    if (lyricsViews.trackIds.includes(track._id)) {
+                      canViewFullLyrics = true;
+                    } else if (lyricsViews.trackIds.length < 2) {
+                      // Tự động lưu vào local storage khi render lời
+                      if (index === 0) { // Tránh gọi nhiều lần trong map
+                        lyricsViews.trackIds.push(track._id);
+                        localStorage.setItem("lyricsViews", JSON.stringify(lyricsViews));
+                      }
+                      canViewFullLyrics = true;
+                    } else {
+                      canViewFullLyrics = false;
+                    }
+                  }
+
+                  // Giới hạn 5 dòng cho người dùng thường
+                  if (!canViewFullLyrics && index >= 5) {
+                    if (index === 5) {
+                      return (
+                        <div key="premium-teaser" className="mt-8 p-10 bg-gradient-to-b from-purple-600/20 to-transparent rounded-3xl border border-purple-500/20 text-center space-y-4">
+                           <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                              <FontAwesomeIcon icon={faMicrophone} className="text-white" />
+                           </div>
+                           <h4 className="text-white font-bold text-xl">Mở khóa toàn bộ lời bài hát</h4>
+                           <p className="text-zinc-400 text-sm max-w-xs mx-auto">Nâng cấp lên gói Premium để thưởng thức lời bài hát thời gian thực và nhiều đặc quyền khác.</p>
+                           <button 
+                            onClick={() => navigate("/premium")}
+                            className="bg-white text-black px-8 py-3 rounded-full text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
+                           >
+                             Nâng cấp ngay
+                           </button>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }
 
                   return (
                     <div 
@@ -434,18 +515,19 @@ const TrackDetailPage: React.FC = () => {
                       ref={(el) => { lyricsRefs.current[index] = el; }}
                       className="flex items-center gap-4 group/line"
                     >
-                      {isSyncingSession && (
-                        <div 
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all ${isRecorded ? 'bg-purple-500 shadow-[0_0_12px_#a855f7]' : 'bg-white/10'}`} 
-                        />
-                      )}
                       <p 
-                        onClick={() => handleMarkLine(index)}
-                        className={`text-2xl lg:text-5xl font-bold transition-all duration-500 cursor-pointer select-none leading-tight ${
+                        onClick={() => {
+                          if (line.time !== -1 && ctx?.audioRef?.current) {
+                            ctx.audioRef.current.currentTime = Math.max(0, line.time + (-0.6));
+                            ctx.audioRef.current.play().catch(e => console.log("Lỗi autoplay", e));
+                            ctx.play();
+                          }
+                        }}
+                        className={`text-2xl lg:text-5xl font-bold transition-all duration-500 cursor-pointer select-none leading-tight hover:text-white ${
                           isActive 
                             ? "text-white scale-105 origin-left drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]" 
-                            : "text-zinc-700 hover:text-zinc-200"
-                        } ${isSyncingSession && !isRecorded ? 'opacity-30' : ''}`}
+                            : "text-zinc-700"
+                        }`}
                       >
                         {line.text}
                       </p>
@@ -460,48 +542,10 @@ const TrackDetailPage: React.FC = () => {
             </div>
 
             {/* Fade effect when collapsed */}
-            {!isExpanded && !isSyncingSession && (
+            {!isExpanded && (
               <div className={`absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#09090b] via-[#09090b]/80 to-transparent z-10 pointer-events-none transition-opacity ${parsedLyrics.length < 5 ? 'opacity-0' : 'opacity-100'}`} />
             )}
           </div>
-
-          {/* Admin Studio Controls - Live Sync Version */}
-          {isAdmin && (
-            <div className="mt-8 flex flex-wrap items-center gap-4 p-6 bg-purple-600/10 border border-purple-500/20 rounded-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex-1">
-                <h4 className="text-white font-bold mb-1 flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isSyncingSession ? 'bg-red-500 animate-pulse' : 'bg-purple-500'}`} />
-                  Lyrics Studio {isSyncingSession && "(Chế độ lưu trực tiếp đang bật)"}
-                </h4>
-                <p className="text-zinc-400 text-xs font-medium">
-                  {isSyncingSession 
-                    ? "✨ Ca sĩ hát đến đâu anh CLICK đến đó. Hệ thống sẽ TỰ LƯU ngay lập tức!"
-                    : "Công cụ đồng bộ lời nhạc Live Sync chuyên nghiệp dành cho Admin."}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {!isSyncingSession ? (
-                  <button 
-                    onClick={() => { setIsSyncingSession(true); setSyncedLines({}); }}
-                    className="bg-purple-600 hover:bg-purple-500 text-white px-8 py-3 rounded-full text-[11px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-[0_10px_30px_rgba(168,85,247,0.3)]"
-                  >
-                    Bật Live Sync
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setIsSyncingSession(false);
-                      // Refresh to apply final state
-                      getSongById(id!).then(res => setTrack(res.data));
-                    }}
-                    className="bg-white text-black px-8 py-3 rounded-full text-[11px] font-black uppercase tracking-widest transition-all hover:bg-zinc-200 active:scale-95 shadow-xl"
-                  >
-                    Hoàn tất & Thoát
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Show More Button */}
           {parsedLyrics.length > 5 && (
@@ -553,9 +597,11 @@ const TrackDetailPage: React.FC = () => {
                     </p>
                     
                     <div className="flex flex-wrap items-center gap-4 justify-center md:justify-start">
-                      <button className="bg-white text-black px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-xl">
-                        Theo dõi
-                      </button>
+                      {(!currentUser._id || currentUser._id !== (mainArtist?.userId?._id || mainArtist?.userId || mainArtist?._id)) && (
+                        <button className="bg-white text-black px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-xl">
+                          Theo dõi
+                        </button>
+                      )}
                       <button 
                         onClick={() => {
                           const id = mainArtist?._id || mainArtist;

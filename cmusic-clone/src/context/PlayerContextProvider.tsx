@@ -22,8 +22,7 @@ const PlayerContextProvider: FC<PlayerContextProviderProps> = ({ children }) => 
   });
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (status === "idle" && token) {
+    if (status === "idle") {
       dispatch(fetchSongs());
     }
   }, [status, dispatch]);
@@ -35,6 +34,12 @@ const PlayerContextProvider: FC<PlayerContextProviderProps> = ({ children }) => 
     return savedVolume ? parseFloat(savedVolume) : 0.7;
   });
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [showLyrics, setShowLyrics] = useState<boolean>(false);
+
+  // ── Ad Timer: đếm thời gian nghe nhạc của user miễn phí ──
+  const adListenSecondsRef = useRef<number>(0);
+  const adTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const AD_TRIGGER_SECONDS = 15 * 60; // 15 phút
 
   useEffect(() => {
     if (audioRef.current) {
@@ -163,9 +168,11 @@ const PlayerContextProvider: FC<PlayerContextProviderProps> = ({ children }) => 
 
 
   const seekSong = async (e: React.MouseEvent<HTMLDivElement>): Promise<void> => {
-    if (audioRef.current && seekBg.current) {
-      audioRef.current.currentTime =
-        ((e.nativeEvent.offsetX / seekBg.current.offsetWidth) * audioRef.current.duration);
+    if (audioRef.current && seekBg.current && audioRef.current.duration) {
+      const rect = seekBg.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+      audioRef.current.currentTime = percentage * audioRef.current.duration;
     }
   };
 
@@ -220,6 +227,37 @@ const PlayerContextProvider: FC<PlayerContextProviderProps> = ({ children }) => 
       };
     }
   }, [audioRef, isRepeat, isShuffle, songs, track]);
+
+  // ── Khởi động / Dừng bộ đếm thời gian quảng cáo ──
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isFreeUser = !user.plan || user.plan === 'free';
+
+    if (playStatus && isFreeUser) {
+      // Bắt đầu đếm giây khi đang phát nhạc
+      adTimerRef.current = setInterval(() => {
+        adListenSecondsRef.current += 1;
+        if (adListenSecondsRef.current >= AD_TRIGGER_SECONDS) {
+          adListenSecondsRef.current = 0; // Reset bộ đếm
+          // Kích hoạt sự kiện hiện quảng cáo
+          window.dispatchEvent(new CustomEvent('cmusic:show-ad'));
+        }
+      }, 1000);
+    } else {
+      // Dừng đếm khi pause hoặc là Premium user
+      if (adTimerRef.current) {
+        clearInterval(adTimerRef.current);
+        adTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (adTimerRef.current) {
+        clearInterval(adTimerRef.current);
+        adTimerRef.current = null;
+      }
+    };
+  }, [playStatus]);
 
   useEffect(() => {
     if (track?._id && playStatus) {
@@ -284,7 +322,9 @@ const PlayerContextProvider: FC<PlayerContextProviderProps> = ({ children }) => 
     volume,
     changeVolume,
     isSearchOpen,
-    setIsSearchOpen
+    setIsSearchOpen,
+    showLyrics,
+    setShowLyrics
   };
 
   return <PlayerContext.Provider value={contextValue}>{children}</PlayerContext.Provider>;

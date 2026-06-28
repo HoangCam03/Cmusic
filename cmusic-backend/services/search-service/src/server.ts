@@ -26,6 +26,9 @@ const connectDatabase = async () => {
   }
 };
 
+import searchRoutes from './routes/search.routes';
+import { errorMiddleware } from '@spotify/libs/middleware/error.middleware';
+
 // ===== ROUTES =====
 
 // Health check
@@ -33,10 +36,10 @@ app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "OK", service: "search-service" });
 });
 
-// Search routes placeholder
-app.get("/search", (req: Request, res: Response) => {
-  res.json({ message: "Search endpoint" });
-});
+app.use("/api/search", searchRoutes);
+
+// Global Error Handler
+app.use(errorMiddleware as any);
 
 // ===== START SERVER =====
 const startServer = async () => {

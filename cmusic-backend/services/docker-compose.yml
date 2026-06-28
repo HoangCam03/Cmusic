@@ -68,6 +68,9 @@ services:
       - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
       - JWT_ACCESS_SECRET=spotify_jwt_secret_2026
       - JWT_REFRESH_SECRET=spotify_refresh_secret_2026
+      - CLOUDINARY_CLOUD_NAME=dl3kqa0oy
+      - CLOUDINARY_API_KEY=365641639148188
+      - CLOUDINARY_API_SECRET=xd5Lvk-Gjy7DNjo61tgIieSr2kA
     depends_on:
       - mongodb
     networks:
@@ -218,6 +221,22 @@ services:
       - mongodb
     networks:
       - cmusic-network
+
+  payment-service:
+    build:
+      context: ../
+      dockerfile: services/payment-service/Dockerfile
+    container_name: cmusic-payment-service
+    ports:
+      - "3011:3011"
+    environment:
+      - PORT=3011
+      - MONGODB_URI=mongodb://admin:admin123@mongodb:27017/cmusic?authSource=admin
+      - CALLBACK_URL=http://api-gateway:3000/api/payment/callback
+    networks:
+      - cmusic-network
+    depends_on:
+      - mongodb
 
 volumes:
   mongodb_data:

@@ -53,10 +53,18 @@ export function Header() {
     <header className="h-[72px] bg-transparent flex items-center justify-between px-6 lg:px-8 shrink-0 relative z-50 border-b border-white/5">
       {/* Left: Nav Arrows */}
       <div className="flex items-center gap-2">
-        <button className="w-8 h-8 flex items-center justify-center bg-white/[0.03] hover:bg-white/[0.08] rounded-full text-[#a1a1aa] hover:text-white transition-colors">
+        <button 
+          onClick={() => navigate(-1)}
+          className="w-8 h-8 flex items-center justify-center bg-white/[0.03] hover:bg-white/[0.08] rounded-full text-[#a1a1aa] hover:text-white transition-colors cursor-pointer"
+          title="Quay lại"
+        >
           <FontAwesomeIcon icon={faChevronLeft} className="w-3.5 h-3.5" />
         </button>
-        <button className="w-8 h-8 flex items-center justify-center bg-white/[0.03] hover:bg-white/[0.08] rounded-full text-[#a1a1aa] hover:text-white transition-colors">
+        <button 
+          onClick={() => navigate(1)}
+          className="w-8 h-8 flex items-center justify-center bg-white/[0.03] hover:bg-white/[0.08] rounded-full text-[#a1a1aa] hover:text-white transition-colors cursor-pointer"
+          title="Tiếp theo"
+        >
           <FontAwesomeIcon icon={faChevronRight} className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -104,12 +112,22 @@ export function Header() {
 
         {isLoggedIn && <NotificationBell />}
 
-        <a
-          href="#"
-          className="hidden lg:block text-[#a855f7] hover:text-[#c084fc] text-[13px] font-medium transition-colors"
-        >
-          Premium
-        </a>
+        {user.plan && user.plan !== 'free' ? (
+          <Link
+            to="/premium"
+            className="hidden lg:flex items-center gap-1.5 bg-gradient-to-r from-yellow-400 to-amber-600 text-black px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest shadow-[0_0_20px_rgba(251,191,36,0.3)] hover:shadow-[0_0_30px_rgba(251,191,36,0.5)] transition-all hover:scale-105"
+          >
+            <FontAwesomeIcon icon={faStar} className="animate-pulse" />
+            VIP MEMBER
+          </Link>
+        ) : (
+          <Link
+            to="/premium"
+            className="hidden lg:block text-[#a855f7] hover:text-[#c084fc] text-[13px] font-medium transition-colors"
+          >
+            Premium
+          </Link>
+        )}
 
         {!isLoggedIn ? (
           <>
@@ -133,8 +151,8 @@ export function Header() {
               onClick={() => setShowDropdown(!showDropdown)}
               className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-medium shadow-lg border-2 border-white/10 hover:scale-105 transition-all cursor-pointer overflow-hidden"
             >
-            {user.avatar ? (
-                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+            {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 user.displayName?.charAt(0).toUpperCase() || "U"
               )}
@@ -147,13 +165,24 @@ export function Header() {
                 <div className="px-5 py-4 border-b border-white/5 mb-1">
                   <p className="text-[10px] font-bold text-purple-500 tracking-[0.2em] uppercase mb-2">Tài khoản</p>
                   <div className="flex flex-col gap-0.5">
-                    <p className="text-[15px] font-bold text-white truncate tracking-tight">{user.displayName || "Người dùng CMusic"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[15px] font-bold text-white truncate tracking-tight">{user.displayName || "Người dùng CMusic"}</p>
+                      {user.plan && user.plan !== 'free' && (
+                        <div className="bg-gradient-to-r from-yellow-400 to-amber-600 text-black text-[9px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-tighter flex items-center gap-1 shadow-[0_0_10px_rgba(251,191,36,0.4)]">
+                           <FontAwesomeIcon icon={faStar} className="text-[8px] animate-spin-slow" />
+                           VIP
+                        </div>
+                      )}
+                    </div>
                     <p className="text-[12px] text-zinc-400 truncate font-medium">{user.email}</p>
                   </div>
                 </div>
 
                 
-                <button className="w-full flex items-center justify-between px-4 py-2.5 text-zinc-400 hover:text-white hover:bg-white/[0.03] transition-all text-[13px] font-normal group">
+                <button 
+                  onClick={() => { navigate("/profile"); setShowDropdown(false); }}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-zinc-400 hover:text-white hover:bg-white/[0.03] transition-all text-[13px] font-normal group cursor-pointer"
+                >
                   <div className="flex items-center gap-3">
                     <FontAwesomeIcon icon={faUser} className="w-3.5 h-3.5" />
                     Hồ sơ
@@ -163,7 +192,7 @@ export function Header() {
                 {user.role === "artist" && (
                   <button 
                     onClick={() => { navigate("/admin/studio"); setShowDropdown(false); }}
-                    className="w-full flex items-center justify-between px-4 py-2.5 text-zinc-400 hover:text-white hover:bg-white/[0.03] transition-all text-[13px] font-normal group"
+                    className="w-full flex items-center justify-between px-4 py-2.5 text-zinc-400 hover:text-white hover:bg-white/[0.03] transition-all text-[13px] font-normal group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <FontAwesomeIcon icon={faMicrophone} className="w-3.5 h-3.5 text-[#ff2d55]" />
@@ -172,10 +201,13 @@ export function Header() {
                   </button>
                 )}
 
-                <button className="w-full flex items-center justify-between px-4 py-2.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/5 transition-all text-[13px] font-medium group">
+                <button 
+                  onClick={() => { navigate("/premium"); setShowDropdown(false); }}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/5 transition-all text-[13px] font-medium group cursor-pointer"
+                >
                   <div className="flex items-center gap-3">
                     <FontAwesomeIcon icon={faStar} className="w-3.5 h-3.5" />
-                    Nâng cấp Premium
+                    {user.plan && user.plan !== 'free' ? "Quản lý gói cước" : "Nâng cấp Premium"}
                   </div>
                 </button>
 

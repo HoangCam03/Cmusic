@@ -98,9 +98,28 @@ export function Player() {
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-white text-[14px] font-medium hover:underline cursor-pointer truncate tracking-tight">
-            {ctx?.track?.title || "Chưa có bài hát"}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-white text-[14px] font-medium hover:underline cursor-pointer truncate tracking-tight">
+              {ctx?.track?.title || "Chưa có bài hát"}
+            </p>
+            {(() => {
+              const user = JSON.parse(localStorage.getItem("user") || "{}");
+              const isPremium = user.plan && user.plan !== 'free';
+              return (
+                <div 
+                  onClick={() => !isPremium && (window.location.href = "/premium")}
+                  className={`px-1.5 py-0.5 rounded-[2px] text-[8px] font-black tracking-tighter border transition-all cursor-pointer ${
+                    isPremium 
+                    ? "bg-purple-600 text-white border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]" 
+                    : "bg-transparent text-zinc-600 border-zinc-700 hover:text-zinc-400 hover:border-zinc-500"
+                  }`}
+                  title={isPremium ? "Chất lượng âm thanh Hi-Fi" : "Nâng cấp Premium để mở khóa Hi-Fi"}
+                >
+                  HI-FI
+                </div>
+              );
+            })()}
+          </div>
           <p className="text-zinc-400 text-[11px] hover:underline hover:text-white cursor-pointer truncate mt-0.5 tracking-wide">
             {ctx?.track?.artist || "Nghệ sĩ CMusic"}
           </p>
@@ -160,8 +179,13 @@ export function Player() {
 
       {/* Right: Tools & Volume */}
       <div className="flex items-center gap-4 w-[30%] justify-end">
-        <button className="text-zinc-500 hover:text-white transition-colors">
+        <button 
+          onClick={() => ctx?.setShowLyrics(!ctx?.showLyrics)}
+          className={`${ctx?.showLyrics ? "text-purple-500" : "text-zinc-500"} hover:text-white transition-colors relative`}
+          title="Lời bài hát (AI)"
+        >
           <FontAwesomeIcon icon={faMicrophone} className="text-xs" />
+          {ctx?.showLyrics && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 bg-purple-500 rounded-full"></div>}
         </button>
         <button className="text-zinc-500 hover:text-white transition-colors">
           <FontAwesomeIcon icon={faListUl} className="text-xs" />

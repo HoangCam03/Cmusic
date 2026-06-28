@@ -14,4 +14,6 @@ export * from './database/schemas/like.schema';
 export * from './database/schemas/follow.schema';
 export * from './database/schemas/permission.schema';
 export * from './database/schemas/plan-feature.schema';
+export * from './database/schemas/subscription.schema';
+export * from './database/schemas/transaction.schema';
 export * from './database/schemas/notification.schema';

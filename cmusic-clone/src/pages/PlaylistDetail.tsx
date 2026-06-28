@@ -38,6 +38,11 @@ export function PlaylistDetailPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
   const fetchDetail = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/signup");
+      return;
+    }
     if (!id) return;
     try {
       const data = await getPlaylistDetail(id);

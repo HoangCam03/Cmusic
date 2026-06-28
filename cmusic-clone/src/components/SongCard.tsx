@@ -41,7 +41,14 @@ export function SongCard({ song }: SongCardProps) {
   return (
     <div
       className="transition-all duration-200 cursor-pointer group flex flex-col items-start relative"
-      onClick={() => navigate(`/track/${song._id}`)}
+      onClick={() => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          navigate("/signup");
+          return;
+        }
+        navigate(`/track/${song._id}`);
+      }}
     >
       <div className="relative w-full aspect-square mb-3">
         {imageUrl ? (

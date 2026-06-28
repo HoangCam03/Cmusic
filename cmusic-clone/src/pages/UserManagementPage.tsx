@@ -38,11 +38,15 @@ import {
   updateUserRole,
   deleteUser,
   createUser,
-  updateUserProfile
+  updateUserProfile,
+  getArtistRequests,
+  updateArtistRequestStatus
 } from '../services/UserManagement/UserManagement';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [artistRequests, setArtistRequests] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'users' | 'requests'>('users');
   const [statsData, setStatsData] = useState({ total: 0, artists: 0, regularUsers: 0 });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -75,22 +79,29 @@ export default function UserManagementPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const userData = await getAllUsers(currentPage, 10, searchTerm);
-      if (userData.success) {
-        setUsers(userData.data.users);
-        setTotalPages(userData.data.pagination?.totalPages || 1);
-      }
+      if (activeTab === 'users') {
+        const userData = await getAllUsers(currentPage, 10, searchTerm);
+        if (userData.success) {
+          setUsers(userData.data.users);
+          setTotalPages(userData.data.pagination?.totalPages || 1);
+        }
 
-      const statsJson = await getUserStats();
-      if (statsJson.success) {
-        setStatsData({
-          total: statsJson.data.total,
-          artists: statsJson.data.artists,
-          regularUsers: statsJson.data.regularUsers
-        });
+        const statsJson = await getUserStats();
+        if (statsJson.success) {
+          setStatsData({
+            total: statsJson.data.total,
+            artists: statsJson.data.artists,
+            regularUsers: statsJson.data.regularUsers
+          });
+        }
+      } else {
+        const reqData = await getArtistRequests('pending');
+        if (reqData.success) {
+          setArtistRequests(reqData.data.requests);
+        }
       }
     } catch (error) {
-      console.error("Lỗi khi lấy dữ liệu người dùng:", error);
+      console.error("Lỗi khi lấy dữ liệu:", error);
     } finally {
       setLoading(false);
     }
@@ -167,6 +178,32 @@ export default function UserManagementPage() {
     });
   };
 
+  const handleRequestStatus = async (requestId: string, status: 'approved' | 'rejected') => {
+    const actionLabel = status === 'approved' ? 'Duyệt' : 'Từ chối';
+    setConfirmDialog({
+      open: true,
+      title: `${actionLabel} yêu cầu`,
+      message: `Bạn có chắc chắn muốn ${actionLabel.toLowerCase()} yêu cầu này?`,
+      confirmLabel: actionLabel,
+      danger: status === 'rejected',
+      onConfirm: async () => {
+        closeConfirm();
+        const loadingToast = toast.loading('Đang xử lý...');
+        try {
+          const res = await updateArtistRequestStatus(requestId, status);
+          if (res.success) {
+            toast.success(`Đã ${actionLabel.toLowerCase()} thành công!`, { id: loadingToast });
+            fetchData();
+          } else {
+            toast.error(res.message || 'Lỗi khi xử lý!', { id: loadingToast });
+          }
+        } catch (error) {
+          toast.error('Lỗi hệ thống!', { id: loadingToast });
+        }
+      }
+    });
+  };
+
   useEffect(() => {
     fetchData();
 
@@ -180,7 +217,7 @@ export default function UserManagementPage() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [searchTerm, currentPage]);
+  }, [searchTerm, currentPage, activeTab]);
 
   const stats = [
     { label: "Tổng người dùng", value: statsData.total, icon: faUsers, color: "text-blue-500" },
@@ -671,55 +708,75 @@ export default function UserManagementPage() {
         ))}
       </div>
 
-      {/* 3. Search Section */}
+      {/* Tabs */}
       <div className="px-10 py-2 flex gap-4">
-        <div className="relative flex-1 group">
-          <FontAwesomeIcon icon={faSearch} className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-[#ff2d55] transition-colors text-sm" />
-          <input
-            type="text"
-            placeholder="Tìm kiếm thành viên..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full bg-[#0c0c0c] border border-white/[0.05] rounded-xl py-3.5 pl-14 pr-6 text-white text-[13px] outline-none focus:border-[#ff2d55]/30 transition-all placeholder:text-zinc-800"
-          />
-        </div>
+        <button 
+          onClick={() => setActiveTab('users')}
+          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-[#ff2d55] text-white shadow-lg shadow-[#ff2d55]/20' : 'bg-transparent text-zinc-500 hover:text-white'}`}
+        >
+          Danh sách người dùng
+        </button>
+        <button 
+          onClick={() => setActiveTab('requests')}
+          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'requests' ? 'bg-[#ff2d55] text-white shadow-lg shadow-[#ff2d55]/20' : 'bg-transparent text-zinc-500 hover:text-white'}`}
+        >
+          Yêu cầu nghệ sĩ {artistRequests.length > 0 && <span className="ml-2 px-2 py-0.5 bg-red-500 rounded-full text-white text-[10px]">{artistRequests.length}</span>}
+        </button>
       </div>
+
+      {/* 3. Search Section (Only for users) */}
+      {activeTab === 'users' && (
+        <div className="px-10 py-2 flex gap-4">
+          <div className="relative flex-1 group">
+            <FontAwesomeIcon icon={faSearch} className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-[#ff2d55] transition-colors text-sm" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm thành viên..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full bg-[#0c0c0c] border border-white/[0.05] rounded-xl py-3.5 pl-14 pr-6 text-white text-[13px] outline-none focus:border-[#ff2d55]/30 transition-all placeholder:text-zinc-800"
+            />
+          </div>
+        </div>
+      )}
 
       {/* 4. Table Section */}
       <div className="px-10 py-8">
         <div className="bg-[#0c0c0c]/50 border border-white/[0.05] rounded-2xl shadow-2xl overflow-visible relative">
           <table className="w-full text-left border-collapse min-w-[900px]">
-            <thead>
-              <tr className="border-b border-white/[0.08] text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black">
-                <th className="px-8 py-5 cursor-pointer hover:text-white group transition-colors" onClick={() => handleSort('displayName')}>
-                  Thành viên
-                  {getSortIcon('displayName')}
-                </th>
-                <th className="px-8 py-5 cursor-pointer hover:text-white group transition-colors" onClick={() => handleSort('role')}>
-                  Vai trò
-                  {getSortIcon('role')}
-                </th>
-                <th className="px-8 py-5 cursor-pointer hover:text-white group transition-colors" onClick={() => handleSort('createdAt')}>
-                  Ngày tham gia
-                  {getSortIcon('createdAt')}
-                </th>
-                <th className="px-6 py-5 text-left">Gói cước</th>
-                <th className="px-6 py-5 text-left">Quốc gia</th>
-                <th className="px-8 py-5 text-center">Trạng thái</th>
-                <th className="px-8 py-5 text-right w-[100px]">Tác vụ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i} className="animate-pulse border-b border-white/[0.03]">
-                    <td colSpan={7} className="px-8 py-6 h-14 bg-white/[0.01]"></td>
+            {activeTab === 'users' ? (
+              <>
+                <thead>
+                  <tr className="border-b border-white/[0.08] text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black">
+                    <th className="px-8 py-5 cursor-pointer hover:text-white group transition-colors" onClick={() => handleSort('displayName')}>
+                      Thành viên
+                      {getSortIcon('displayName')}
+                    </th>
+                    <th className="px-8 py-5 cursor-pointer hover:text-white group transition-colors" onClick={() => handleSort('role')}>
+                      Vai trò
+                      {getSortIcon('role')}
+                    </th>
+                    <th className="px-8 py-5 cursor-pointer hover:text-white group transition-colors" onClick={() => handleSort('createdAt')}>
+                      Ngày tham gia
+                      {getSortIcon('createdAt')}
+                    </th>
+                    <th className="px-6 py-5 text-left">Gói cước</th>
+                    <th className="px-6 py-5 text-left">Quốc gia</th>
+                    <th className="px-8 py-5 text-center">Trạng thái</th>
+                    <th className="px-8 py-5 text-right w-[100px]">Tác vụ</th>
                   </tr>
-                ))
-              ) : users.length > 0 ? (
+                </thead>
+                <tbody>
+                  {loading ? (
+                    [...Array(5)].map((_, i) => (
+                      <tr key={i} className="animate-pulse border-b border-white/[0.03]">
+                        <td colSpan={7} className="px-8 py-6 h-14 bg-white/[0.01]"></td>
+                      </tr>
+                    ))
+                  ) : users.length > 0 ? (
                 users.map((user) => {
                   const badge = getRoleBadge(user.role);
                   return (
@@ -832,16 +889,78 @@ export default function UserManagementPage() {
                         )}
                       </td>
                     </tr>
-                  )
-                })
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-8 py-32 text-center text-zinc-700 italic text-sm">
-                    Không tìm thấy kết quả nào.
-                  </td>
-                </tr>
-              )}
-            </tbody>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-8 py-10 text-center text-zinc-500 text-sm font-medium">Không tìm thấy người dùng nào.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </>
+            ) : (
+              <>
+                <thead>
+                  <tr className="border-b border-white/[0.08] text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black">
+                    <th className="px-8 py-5">Người dùng</th>
+                    <th className="px-6 py-5">Nghệ danh</th>
+                    <th className="px-6 py-5">Lý do/Giới thiệu</th>
+                    <th className="px-8 py-5 text-right">Tác vụ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    [...Array(3)].map((_, i) => (
+                      <tr key={i} className="animate-pulse border-b border-white/[0.03]">
+                        <td colSpan={4} className="px-8 py-6 h-14 bg-white/[0.01]"></td>
+                      </tr>
+                    ))
+                  ) : artistRequests.length > 0 ? (
+                    artistRequests.map(req => (
+                      <tr key={req._id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-all">
+                        <td className="px-8 py-5">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-zinc-800 border border-white/10 flex items-center justify-center overflow-hidden">
+                              {req.userId?.avatarUrl ? (
+                                <img src={req.userId?.avatarUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <FontAwesomeIcon icon={faUser} className="text-zinc-500" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-white text-[13.5px] font-bold">{req.userId?.displayName || 'Unknown'}</p>
+                              <p className="text-zinc-500 text-[11px] font-medium">{req.userId?.email || 'No email'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-white font-bold text-[13px]">{req.stageName}</td>
+                        <td className="px-6 py-5 text-zinc-400 text-[12px] max-w-[250px]">
+                          <p className="truncate">{req.reason || req.bio || 'Không có'}</p>
+                        </td>
+                        <td className="px-8 py-5 text-right space-x-3">
+                          <button 
+                            onClick={() => handleRequestStatus(req._id, 'approved')} 
+                            className="text-emerald-500 hover:text-emerald-400 font-bold text-[11px] uppercase tracking-widest bg-emerald-500/10 px-4 py-2.5 rounded-lg transition-all"
+                          >
+                            Duyệt
+                          </button>
+                          <button 
+                            onClick={() => handleRequestStatus(req._id, 'rejected')} 
+                            className="text-[#ff2d55] hover:text-[#ff4b6d] font-bold text-[11px] uppercase tracking-widest bg-[#ff2d55]/10 px-4 py-2.5 rounded-lg transition-all"
+                          >
+                            Từ chối
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-8 py-10 text-center text-zinc-500 text-sm font-medium">Không có yêu cầu nào đang chờ duyệt.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </>
+            )}
           </table>
         </div>
 

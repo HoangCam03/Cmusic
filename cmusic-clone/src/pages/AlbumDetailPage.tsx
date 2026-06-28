@@ -36,6 +36,11 @@ const AlbumDetailPage: React.FC = () => {
 
   useEffect(() => {
     const fetchAlbumData = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        navigate("/signup");
+        return;
+      }
       try {
         setLoading(true);
         const res = await api.get(`/catalog/albums/${id}`);

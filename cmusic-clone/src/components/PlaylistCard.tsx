@@ -2,6 +2,9 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlay } from "@fortawesome/free-solid-svg-icons";
+import { useContext } from "react";
+import { PlayerContext } from "../context/PlayerContext";
+import api from "../services/api";
 
 interface PlaylistCardProps {
   playlist: {
@@ -17,10 +20,40 @@ interface PlaylistCardProps {
 
 export const PlaylistCard: React.FC<PlaylistCardProps> = ({ playlist }) => {
   const navigate = useNavigate();
+  const { playWithId } = useContext(PlayerContext) as any;
+
+  const handlePlay = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Ngăn việc chuyển hướng trang
+    
+    // Kiểm tra đăng nhập
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/signup");
+      return;
+    }
+
+    try {
+      const res = await api.get(`/playlists/${playlist._id}`);
+      const tracks = res.data.data.tracks;
+      if (tracks && tracks.length > 0) {
+        // Phát bài đầu tiên và truyền danh sách bài hát (queue)
+        await playWithId(tracks[0]._id, tracks);
+      }
+    } catch (err) {
+      console.error("Lỗi khi phát playlist:", err);
+    }
+  };
 
   return (
     <div
-      onClick={() => navigate(`/playlist/${playlist._id}`)}
+      onClick={() => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          navigate("/signup");
+          return;
+        }
+        navigate(`/playlist/${playlist._id}`);
+      }}
       className="p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] transition-all duration-300 cursor-pointer group border border-white/5 shadow-lg flex flex-col h-full"
     >
       <div className="relative aspect-square rounded-lg overflow-hidden mb-4 shadow-[0_8px_24px_rgba(0,0,0,0.5)] bg-zinc-800">
@@ -31,7 +64,10 @@ export const PlaylistCard: React.FC<PlaylistCardProps> = ({ playlist }) => {
         />
         
         {/* Hover Play Button */}
-        <div className="absolute right-3 bottom-3 w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center text-white opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 shadow-2xl hover:scale-110 active:scale-95">
+        <div 
+          onClick={handlePlay}
+          className="absolute right-3 bottom-3 w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center text-white opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 shadow-2xl hover:scale-110 active:scale-95 z-10"
+        >
           <FontAwesomeIcon icon={faPlay} className="ml-1 text-lg" />
         </div>
       </div>

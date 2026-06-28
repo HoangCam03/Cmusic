@@ -24,9 +24,13 @@ import SearchPage from "./pages/SearchPage";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { NowPlayingSidebar } from "./components/NowPlayingSidebar";
 import { PlaylistDetailPage } from "./pages/PlaylistDetail";
+import { GenreDetailPage } from "./pages/GenreDetailPage";
 import LikedSongsPage from "./pages/LikedSongsPage";
 import ArtistStudioPage from "./pages/ArtistStudioPage";
 import PricingPage from "./pages/PricingPage";
+import ProfilePage from "./pages/ProfilePage";
+import { AdOverlay } from "./components/AdOverlay";
+import { LyricsOverlay } from "./components/LyricsOverlay";
 import { NotificationProvider } from "./context/NotificationContext";
 
 import { useAppDispatch, useAppSelector } from "./store/store";
@@ -43,6 +47,7 @@ const App: React.FC = () => {
 
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = React.useState(!!localStorage.getItem("token"));
+  const [showAd, setShowAd] = React.useState(false);
 
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem("token"));
@@ -53,6 +58,17 @@ const App: React.FC = () => {
       dispatch(fetchPlaylists());
     }
   }, [playlistsState.status, dispatch, isLoggedIn]);
+
+  // Lắng nghe sự kiện hiện quảng cáo từ PlayerContextProvider
+  useEffect(() => {
+    const handleShowAd = () => {
+      // Tự động dừng nhạc khi hiện quảng cáo
+      if (audioRef?.current) audioRef.current.pause();
+      setShowAd(true);
+    };
+    window.addEventListener('cmusic:show-ad', handleShowAd);
+    return () => window.removeEventListener('cmusic:show-ad', handleShowAd);
+  }, [audioRef]);
 
   return (
     <NotificationProvider>
@@ -119,8 +135,11 @@ const App: React.FC = () => {
                         <Route path="/artist/:id" element={<ArtistDetailPage />} />
                         <Route path="/album/:id" element={<AlbumDetailPage />} />
                         <Route path="/playlist/:id" element={<PlaylistDetailPage />} />
+                        <Route path="/genre/:genreName" element={<GenreDetailPage />} />
                         <Route path="/collection/tracks" element={<LikedSongsPage />} />
                         <Route path="/premium" element={<PricingPage />} />
+                        <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/admin" element={<AdminPage />} />
                       </Routes>
                     </div>
@@ -154,6 +173,21 @@ const App: React.FC = () => {
           }
         />
       </Routes>
+
+      {/* Ad Overlay — hiện thị toàn màn hình khi có quảng cáo */}
+      {showAd && (
+        <AdOverlay
+          onClose={() => {
+            setShowAd(false);
+            // Tiếp tục phát nhạc sau khi đóng quảng cáo
+            if (audioRef?.current) audioRef.current.play().catch(() => {});
+          }}
+          onUpgrade={() => setShowAd(false)}
+        />
+      )}
+
+      {/* Lyrics Overlay */}
+      <LyricsOverlay />
     </NotificationProvider>
   );
 };

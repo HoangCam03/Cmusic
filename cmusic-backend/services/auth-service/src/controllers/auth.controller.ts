@@ -227,7 +227,7 @@ class AuthController {
     try {
       const { plan } = req.body;
       const userId = req.headers['x-user-id']; // Lấy từ Gateway
-      
+
       if (!userId) throw new AuthError('Vui lòng đăng nhập để thực hiện');
       if (!['student', 'premium', 'family'].includes(plan)) {
         throw new Error('Gói cước không hợp lệ');
@@ -238,8 +238,8 @@ class AuthController {
       expiryDate.setDate(expiryDate.getDate() + 30);
 
       const user = await User.findByIdAndUpdate(
-        userId, 
-        { plan, premiumExpiresAt: expiryDate }, 
+        userId,
+        { plan, premiumExpiresAt: expiryDate },
         { new: true }
       ).select('-password');
 

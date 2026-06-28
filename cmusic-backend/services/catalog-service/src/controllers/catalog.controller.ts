@@ -7,6 +7,66 @@ import { NotificationService } from '../services/notification.service';
 
 import { NotFoundError } from '@spotify/libs/errors';
 
+const interpolateTimestamps = (lyricsArr: any[]) => {
+  // BƯỚC 1: Xử lý các dòng có start = -1
+  for (let i = 0; i < lyricsArr.length; i++) {
+    if (lyricsArr[i].start === -1) {
+      // Tìm mốc thời gian hợp lệ gần nhất phía sau
+      let nextValidIndex = -1;
+      for (let j = i + 1; j < lyricsArr.length; j++) {
+        if (lyricsArr[j].start !== -1) {
+          nextValidIndex = j;
+          break;
+        }
+      }
+
+      if (nextValidIndex !== -1) {
+        // Có mốc phía sau -> Lùi dần về trước (mỗi câu giả định 2.5s)
+        const nextTime = lyricsArr[nextValidIndex].start;
+        const count = nextValidIndex - i;
+        const step = 2.5;
+        // Đảm bảo không bị âm
+        let startTime = Math.max(0, nextTime - count * step);
+        const actualStep = (nextTime - startTime) / count;
+        
+        for (let k = i; k < nextValidIndex; k++) {
+          lyricsArr[k].start = parseFloat((startTime + (k - i) * actualStep).toFixed(2));
+          lyricsArr[k].end = parseFloat((startTime + (k - i + 1) * actualStep).toFixed(2));
+        }
+        i = nextValidIndex - 1; // Bỏ qua các dòng đã xử lý
+      } else {
+        // Không có mốc phía sau -> Dựa vào mốc phía trước để cộng dồn
+        let prevValidTime = 0;
+        if (i > 0 && lyricsArr[i - 1].end !== -1) {
+          prevValidTime = lyricsArr[i - 1].end;
+        }
+        lyricsArr[i].start = prevValidTime;
+        lyricsArr[i].end = prevValidTime + 2.5;
+      }
+    }
+  }
+
+  // BƯỚC 2: Rải đều các dòng có start trùng nhau (chống lỗi AI gán nhiều dòng cùng 1 mốc tgian)
+  let i = 0;
+  while (i < lyricsArr.length) {
+    let j = i + 1;
+    while (j < lyricsArr.length && lyricsArr[j].start === lyricsArr[i].start) j++;
+    const count = j - i;
+    if (count > 1) {
+      const start = lyricsArr[i].start;
+      let end = lyricsArr[j - 1].end;
+      if (!end || end <= start) end = j < lyricsArr.length ? lyricsArr[j].start : start + count * 2;
+      const step = (end - start) / count;
+      for (let k = 0; k < count; k++) {
+        lyricsArr[i + k].start = parseFloat((start + k * step).toFixed(2));
+        lyricsArr[i + k].end = parseFloat((start + (k + 1) * step).toFixed(2));
+      }
+    }
+    i = j;
+  }
+  return lyricsArr;
+};
+
 class CatalogController {
   // 1. Lấy danh sách bài hát (Phân trang)
   public async getTracks(req: Request, res: Response, next: NextFunction) {
@@ -31,8 +91,8 @@ class CatalogController {
         }
 
         // Tìm các hồ sơ nghệ sĩ chính thức mà User này sở hữu
-        const myArtistProfiles = await Artist.find({ 
-          userId: new mongoose.Types.ObjectId(userId as string) 
+        const myArtistProfiles = await Artist.find({
+          userId: new mongoose.Types.ObjectId(userId as string)
         }).select('_id');
         const artistProfileIds = myArtistProfiles.map(p => p._id);
 
@@ -62,6 +122,70 @@ class CatalogController {
         limit,
         offset,
       }));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // 1b.  Smart Playlist Engine — Tự động tạo Playlist từ nhạc hiện có trong hệ thống
+  public async getRecommendedPlaylists(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Bước 1: Lấy tất cả genres đang có nhạc thật (không xóa)
+      const allGenres: string[] = await Track.distinct('genre', { isDeleted: false });
+      const validGenres = allGenres.filter(g => g && g.trim() !== '' && g !== 'null');
+
+      // Bước 2: Với mỗi genre, tạo Playlist ảo thông minh
+      const smartPlaylists = await Promise.all(
+        validGenres.slice(0, 8).map(async (genreName) => {
+          // Lấy bài hát trong genre này, sắp xếp theo lượt nghe giảm dần (phổ biến nhất lên đầu)
+          const tracks = await Track.find({ genre: genreName, isDeleted: false })
+            .sort({ playCount: -1, createdAt: -1 })
+            .limit(20)
+            .select('_id title artist coverUrl playCount');
+
+          if (tracks.length === 0) return null;
+
+          // Chọn ảnh bìa từ bài hát phổ biến nhất hoặc mới nhất
+          const coverTrack = tracks[0];
+
+          // Tự động tạo tên & mô tả theo thể loại (kiểu "AI")
+          const nameMap: Record<string, { name: string; desc: string }> = {
+            'K-Pop': { name: 'K-Pop Daily Mix', desc: 'Năng lượng bùng nổ từ Hàn Quốc' },
+            'V-Pop': { name: 'V-Pop Chill Mix', desc: 'Nhạc Việt hay nhất hôm nay' },
+            'US-UK': { name: 'Global Hits Mix', desc: 'Top nhạc quốc tế đang hot' },
+            'Rap': { name: 'Rap Zone Mix', desc: 'Flow chuẩn, lyric sắc bén' },
+            'Lo-Fi': { name: 'Lofi Study Mix', desc: 'Tập trung hơn với lo-fi beats' },
+            'R&B': { name: 'R&B Vibes Mix', desc: 'Giai điệu soul, cảm xúc đỉnh cao' },
+            'EDM': { name: 'EDM Drop Mix', desc: 'Drop mạnh, năng lượng cực đại' },
+            'Ballad': { name: 'Ballad Đêm Khuya', desc: 'Những giai điệu chạm đến trái tim' },
+            'Acoustic': { name: 'Acoustic Corner', desc: 'Mộc mạc, giản dị, chân thật' },
+            'World Music': { name: 'World Music Mix', desc: 'Âm nhạc từ khắp nơi trên thế giới' },
+          };
+
+          const preset = nameMap[genreName];
+          const playlistName = preset?.name ?? `${genreName} Mix`;
+          const description = preset?.desc ?? `Tuyển chọn ${tracks.length} bài hát ${genreName} dành riêng cho bạn`;
+
+          return {
+            _id: `smart-${genreName.toLowerCase().replace(/\s+/g, '-')}`,
+            name: playlistName,
+            description: description,
+            thumbnail: coverTrack.coverUrl || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300',
+            trackCount: tracks.length,
+            isPublic: true,
+            isSmart: true,
+            genre: genreName,
+            userId: {
+              displayName: 'CMusic',
+              avatarUrl: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100'
+            }
+          };
+        })
+      );
+
+      // Lọc bỏ genre không có nhạc
+      const result = smartPlaylists.filter(Boolean);
+      return res.json(new SuccessResponse('Lấy playlist thông minh thành công', result));
     } catch (error) {
       next(error);
     }
@@ -99,17 +223,17 @@ class CatalogController {
       if (!currentTrack) throw new NotFoundError('Không tìm thấy bài hát gốc');
 
       // 1. Tìm theo thể loại trước
-      let tracks = await Track.find({ 
-        genre: { $in: currentTrack.genre || [] }, 
+      let tracks = await Track.find({
+        genre: { $in: currentTrack.genre || [] },
         _id: { $ne: trackId },
-        isDeleted: false 
+        isDeleted: false
       }).limit(5).populate('artistId', 'displayName').populate('officialArtistId');
 
       // 2. Nếu không thấy bài cùng thể loại, lấy bài mới nhất làm dự phòng
       if (tracks.length === 0) {
-        tracks = await Track.find({ 
+        tracks = await Track.find({
           _id: { $ne: trackId },
-          isDeleted: false 
+          isDeleted: false
         }).sort({ createdAt: -1 }).limit(5).populate('artistId', 'displayName').populate('officialArtistId');
       }
 
@@ -127,7 +251,7 @@ class CatalogController {
       const files = req.files as { [fieldname: string]: any[] };
 
       // Lấy link từ Cloudinary đã được multer upload xong
-      const audioUrl = files?.['audio']?.[0]?.path; 
+      const audioUrl = files?.['audio']?.[0]?.path;
       const coverUrl = files?.['cover']?.[0]?.path;
 
       if (!audioUrl) {
@@ -135,7 +259,7 @@ class CatalogController {
       }
 
       let linkedArtistIds: any[] = [];
-      
+
       // 1. Lấy ID từ các hồ sơ đã chọn thủ công ở UI (Hỗ trợ cả officialArtistId và officialArtistId[])
       const rawArtistId = req.body.officialArtistId || req.body['officialArtistId[]'];
       if (rawArtistId) {
@@ -144,37 +268,40 @@ class CatalogController {
 
       // 2. SMART LINKER: Bóc tách nghệ sĩ từ tên hiển thị (artist)
       if (artist && artist !== "Unknown Artist") {
-        // Tách tên bằng regex hỗ trợ: ft, feat, &, featuring, và dấu phẩy
-        const artistNames = artist.split(/\b(?:ft\.?|feat\.?|&|featuring|,)\b/i)
-                                  .map((name: string) => name.trim())
-                                  .filter((name: string) => name.length > 0);
+        const artistNames = artist.split(/ft\.?|feat\.?|&|featuring|,|x/i)
+          .map((name: string) => name.trim())
+          .filter((name: string) => name.length > 0);
 
         for (const name of artistNames) {
-           // Tìm nghệ sĩ theo tên (không phân biệt hoa thường)
-           let foundArtist = await Artist.findOne({ name: { $regex: new RegExp(`^${name}$`, "i") } });
-           
-           if (!foundArtist) {
-             // Nếu chưa có thì tự tạo mới hồ sơ "Chưa xác minh"
-             foundArtist = await Artist.create({ 
-               name: name,
-               bio: `Hồ sơ tự động cho nghệ sĩ ${name}.`,
-               avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
-               isVerified: false
-             });
-           }
+          // Tìm nghệ sĩ theo tên (Chuẩn hóa để tránh trùng lặp)
+          let foundArtist = await Artist.findOne({ name: { $regex: new RegExp(`^${name}$`, "i") } });
 
-           // Nếu ID này chưa có trong danh sách thì thêm vào
-           const artistIdStr = foundArtist._id.toString();
-           if (!linkedArtistIds.includes(artistIdStr)) {
-             linkedArtistIds.push(artistIdStr);
-           }
+          if (!foundArtist) {
+            foundArtist = await Artist.create({
+              name: name,
+              bio: `Hồ sơ tự động cho nghệ sĩ ${name}.`,
+              avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
+              isVerified: false
+            });
+          }
+
+          const artistIdStr = foundArtist._id.toString();
+          // Chỉ thêm nếu ID này chưa tồn tại trong danh sách (Tránh lặp Rosé)
+          if (!linkedArtistIds.includes(artistIdStr)) {
+            linkedArtistIds.push(artistIdStr);
+          }
         }
       }
 
+      // 1. Lấy mảng thể loại (Hỗ trợ cả genre và genre[])
+      const rawGenre = req.body.genre || req.body['genre[]'];
+      const genreArray = (Array.isArray(rawGenre) ? rawGenre : (rawGenre ? [rawGenre] : []))
+        .filter(g => g && g !== 'null' && g !== 'undefined');
+
       const track = new Track({
         title,
-        artist: artist || "Unknown Artist", 
-        genre: Array.isArray(genre) ? genre : [genre],
+        artist: artist || "Unknown Artist",
+        genre: genreArray,
         duration: parseInt(duration) || 0,
         audioUrl,
         coverUrl,
@@ -206,15 +333,15 @@ class CatalogController {
   public async getTracksByArtist(req: Request, res: Response, next: NextFunction) {
     try {
       const { artistId } = req.params;
-      
+
       // Kiểm tra định dạng ID hợp lệ trước khi query DB để tránh lỗi CastError
       if (!mongoose.Types.ObjectId.isValid(artistId)) {
-         return res.status(400).json({ success: false, message: 'ID Nghệ sĩ không hợp lệ' });
+        return res.status(400).json({ success: false, message: 'ID Nghệ sĩ không hợp lệ' });
       }
 
       // 1. Kiểm tra xem artistId này là của Hồ sơ nghệ sĩ chuyên nghiệp hay là của một User
       const artistProfile = await Artist.findById(artistId);
-      
+
       let query: any = {};
 
       if (artistProfile) {
@@ -251,63 +378,196 @@ class CatalogController {
       const files = req.files as { [fieldname: string]: any[] };
 
       let linkedArtistIds: any[] = [];
-      
+
       const rawArtistId = req.body.officialArtistId || req.body['officialArtistId[]'];
       if (rawArtistId) {
         linkedArtistIds = (Array.isArray(rawArtistId) ? rawArtistId : [rawArtistId]).map(id => id.toString());
       }
 
-      const userId = req.headers['x-user-id'];
-      const userRole = req.headers['x-user-role'];
+      const userId = req.headers['x-user-id'] as string;
+      const userRole = req.headers['x-user-role'] as string;
 
       // Kiểm tra quyền sở hữu bài hát
-      const existingTrack = await Track.findById(trackId);
+      const existingTrack = await Track.findById(trackId).populate('officialArtistId');
       if (!existingTrack) throw new NotFoundError('Không tìm thấy bài hát để cập nhật');
 
-      if (userRole !== 'admin' && existingTrack.artistId.toString() !== userId) {
-        return res.status(403).json({ success: false, message: 'Bạn không có quyền chỉnh sửa bài hát này' });
+      // Lấy ID người đã upload (artistId)
+      const ownerId = (existingTrack.artistId as any)?._id?.toString() || existingTrack.artistId?.toString();
+
+      // Kiểm tra xem user hiện tại có phải là nghệ sĩ chính thức của bài không
+      // (tức là có hồ sơ Artist được liên kết với userId này)
+      const officialArtists = (existingTrack.officialArtistId as any[]) || [];
+      const isLinkedArtist = officialArtists.some(
+        (a: any) => a?.userId?.toString() === userId
+      );
+
+      const userPermissions = (req.headers['x-user-permissions'] as string || '').split(',');
+      const isSuperAdmin = userRole === 'admin' || userRole === 'ADMIN';
+      const hasCatalogPerm = userPermissions.includes('manage_catalog') || userPermissions.includes('manage_tracks');
+      const canEdit = isSuperAdmin || hasCatalogPerm || ownerId === userId || isLinkedArtist;
+
+      if (!canEdit) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền chỉnh sửa bài hát này'
+        });
       }
 
       // SMART LINKER cho Update
       if (artist && artist !== "Unknown Artist") {
-        const artistNames = artist.split(/\b(?:ft\.?|feat\.?|&|featuring|,)\b/i)
-                                  .map((name: string) => name.trim())
-                                  .filter((name: string) => name.length > 0);
+        // Tách tên linh hoạt hơn: ft, feat, &, x, dấu phẩy
+        const artistNames = artist.split(/ft\.?|feat\.?|&|featuring|,|x/i)
+          .map((name: string) => name.trim())
+          .filter((name: string) => name.length > 0);
 
         for (const name of artistNames) {
-           let foundArtist = await Artist.findOne({ name: { $regex: new RegExp(`^${name}$`, "i") } });
-           if (!foundArtist) {
-             foundArtist = await Artist.create({ 
-               name: name,
-               bio: `Hồ sơ tự động cho nghệ sĩ ${name}.`,
-               avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
-               isVerified: false
-             });
-           }
-           const artistIdStr = foundArtist._id.toString();
-           if (!linkedArtistIds.includes(artistIdStr)) {
-             linkedArtistIds.push(artistIdStr);
-           }
+          let foundArtist = await Artist.findOne({ name: { $regex: new RegExp(`^${name}$`, "i") } });
+
+          if (!foundArtist) {
+            foundArtist = await Artist.create({
+              name: name,
+              bio: `Hồ sơ tự động cho nghệ sĩ ${name}.`,
+              avatarUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
+              isVerified: false
+            });
+          }
+
+          const artistIdStr = foundArtist._id.toString();
+          // Chỉ thêm nếu ID này chưa tồn tại trong danh sách (Tránh lặp Rosé)
+          if (!linkedArtistIds.includes(artistIdStr)) {
+            linkedArtistIds.push(artistIdStr);
+          }
         }
       }
 
-      const updateData: any = { 
-        title, 
-        artist, 
-        genre, 
-        lyrics, 
-        artistId, 
+      // Lấy mảng thể loại (Hỗ trợ cả genre và genre[])
+      const rawGenre = req.body.genre || req.body['genre[]'];
+      const genreArray = (Array.isArray(rawGenre) ? rawGenre : (rawGenre ? [rawGenre] : []))
+        .filter(g => g && g !== 'null' && g !== 'undefined');
+
+      const updateData: any = {
+        title,
+        artist,
+        genre: genreArray,
+        lyrics,
+        artistId,
         albumId: albumId || null,
         officialArtistId: linkedArtistIds
       };
-      
+
+      if (req.body.syncedLyrics) {
+        updateData.syncedLyrics = req.body.syncedLyrics;
+      } else if (req.body.lyrics && req.body.lyrics.includes('[00:')) {
+        // Nếu truyền LRC thuần nhưng không có syncedLyrics, tự động parse
+        updateData.syncedLyrics = [];
+      } else if (
+        req.body.lyrics &&
+        req.body.lyrics !== existingTrack.lyrics &&
+        existingTrack.syncedLyrics &&
+        existingTrack.syncedLyrics.length > 0 &&
+        !req.body.lyrics.includes('[00:')
+      ) {
+        console.log(`[AI] Phát hiện thay đổi lời bài hát từ người dùng. Kích hoạt Llama 3 để đồng bộ mốc thời gian...`);
+        try {
+          const userLines = req.body.lyrics.split('\n').filter((l: string) => l.trim() !== '');
+          const fullTemplate = userLines.map((text: string) => ({ start: -1, end: -1, text }));
+          const oldSegments = existingTrack.syncedLyrics.map((s: any) => ({ start: s.start, end: s.end, text: s.text }));
+
+          const callGroqUpdate = async (body: object): Promise<any> => {
+            let lastError = '';
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+              });
+
+              if (res.ok) return res.json();
+
+              const errBody = await res.text();
+              lastError = `HTTP ${res.status}: ${errBody}`;
+              console.error(`[AI] Groq API lỗi lần ${attempt}/3: ${lastError}`);
+
+              if (res.status === 429) {
+                const waitMs = attempt * 5000;
+                await new Promise(resolve => setTimeout(resolve, waitMs));
+              } else {
+                break;
+              }
+            }
+            throw new Error(`Groq API thất bại: ${lastError}`);
+          };
+
+          const CHUNK_SIZE = 25;
+          const chunks: typeof fullTemplate[] = [];
+          for (let i = 0; i < fullTemplate.length; i += CHUNK_SIZE) {
+            chunks.push(fullTemplate.slice(i, i + CHUNK_SIZE));
+          }
+
+          const allAlignedLines: any[] = [];
+          for (let ci = 0; ci < chunks.length; ci++) {
+            const chunk = chunks[ci];
+
+            const prompt = `You are an expert audio syncing tool.
+Your ONLY task is to fill in the "start" and "end" timestamps in the provided JSON array using data from the old synced segments.
+
+CRITICAL RULES:
+1. You MUST return the JSON array EXACTLY as provided, with the same "text" fields. DO NOT change, merge, split, or delete any "text".
+2. Find the corresponding text in the old segments and fill in the "start" and "end" fields.
+3. If the user's line is missing from the old segments (e.g. intro), leave "start" and "end" as -1. We will calculate them mathematically later.
+4. If the user added more words to a line, map it to the EARLIEST 'start' time of the old segments that match it.
+
+JSON Template to fill in (DO NOT modify "text"):
+${JSON.stringify(chunk, null, 2)}
+
+Old synced segments (use these for timestamps):
+${JSON.stringify(oldSegments)}
+
+Return ONLY a JSON object in this format:
+{
+  "lyrics": [
+    { "start": number, "end": number, "text": "exact line from template" }
+  ]
+}
+Do not include markdown or explanations.`;
+
+            const chatData = await callGroqUpdate({
+              model: 'llama-3.1-8b-instant',
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.1,
+              response_format: { type: "json_object" }
+            });
+
+            const alignmentData = JSON.parse(chatData.choices[0].message.content);
+            if (alignmentData && alignmentData.lyrics && alignmentData.lyrics.length > 0) {
+              allAlignedLines.push(...alignmentData.lyrics);
+            } else {
+              throw new Error(`Chunk ${ci + 1} trả về format không hợp lệ`);
+            }
+
+            if (ci < chunks.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+
+          updateData.syncedLyrics = interpolateTimestamps(allAlignedLines);
+          console.log(`[AI] Đồng bộ Llama 3 thành công sau khi sửa lời!`);
+        } catch (e) {
+          console.error(`[AI] Lỗi khi re-align Llama 3 lúc sửa lời:`, e);
+          updateData.syncedLyrics = [];
+        }
+      }
+
       // Nếu có upload ảnh bìa mới
       if (files?.['cover']?.[0]?.path) {
         updateData.coverUrl = files['cover'][0].path;
       }
 
       const track = await Track.findByIdAndUpdate(trackId, updateData, { new: true });
-      
+
       if (!track) throw new NotFoundError('Không tìm thấy bài hát để cập nhật');
 
       return res.json(new SuccessResponse('Cập nhật bài hát thành công', track));
@@ -331,24 +591,25 @@ class CatalogController {
         return res.status(403).json({ success: false, message: 'Bạn không có quyền xóa bài hát này' });
       }
 
-      const track = await Track.findByIdAndUpdate(trackId, { isDeleted: true }, { new: true });
-      
+      const track = await Track.findByIdAndDelete(trackId);
+
       if (!track) throw new NotFoundError('Không tìm thấy bài hát để xóa');
 
-      return res.json(new SuccessResponse('Xóa bài hát thành công (Soft Delete)', null));
+      return res.json(new SuccessResponse('Xóa bài hát hoàn toàn khỏi database thành công', null));
     } catch (error) {
       next(error);
     }
   }
   // ─── ARTIST MANAGEMENT ──────────────────────────────────────────────────
-  
+
   // 7. Lấy danh sách nghệ sĩ
   public async getArtists(req: Request, res: Response, next: NextFunction) {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
       const search = req.query.search as string;
-      const query: any = {};
-      
+
+      let query: any = {};
+
       if (search) {
         query.name = { $regex: search, $options: 'i' };
       }
@@ -358,7 +619,7 @@ class CatalogController {
       if (req.query.mine === 'true' && userId) {
         query.userId = userId;
       }
-      
+
       const artists = await Artist.find(query).sort({ name: 1 }).limit(limit);
       return res.json(new SuccessResponse('Lấy danh sách nghệ sĩ thành công', artists));
     } catch (error) {
@@ -381,7 +642,7 @@ class CatalogController {
       // Tính toán người nghe hàng tháng (Monthly Listeners - số user duy nhất trong 30 ngày qua)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
+
       const trackIds = tracks.map(t => t._id);
       const monthlyListeners = await History.distinct('userId', {
         trackId: { $in: trackIds },
@@ -407,7 +668,7 @@ class CatalogController {
     try {
       const { name, bio, facebook, instagram, twitter, youtube, isVerified, userId } = req.body;
       const files = req.files as { [fieldname: string]: any[] };
-      
+
       const artist = new Artist({
         name,
         bio,
@@ -432,9 +693,9 @@ class CatalogController {
       const { name, bio, facebook, instagram, twitter, youtube, isVerified, userId } = req.body;
       const files = req.files as { [fieldname: string]: any[] };
 
-      const updateData: any = { 
-        name, 
-        bio, 
+      const updateData: any = {
+        name,
+        bio,
         isVerified: isVerified === 'true',
         userId: userId || null,
         socials: { facebook, instagram, twitter, youtube }
@@ -442,7 +703,7 @@ class CatalogController {
 
       if (files?.['avatar']?.[0]?.path) updateData.avatarUrl = files['avatar'][0].path;
       if (files?.['banner']?.[0]?.path) updateData.bannerUrl = files['banner'][0].path;
-      
+
       // Xử lý gallery nếu có upload thêm ảnh
       if (files?.['gallery']) {
         updateData.$push = { gallery: { $each: files['gallery'].map(f => f.path) } };
@@ -491,7 +752,7 @@ class CatalogController {
   }
 
   // ─── ALBUM MANAGEMENT ──────────────────────────────────────────────────
-  
+
   // 12. Lấy danh sách Album
   public async getAlbums(req: Request, res: Response, next: NextFunction) {
     try {
@@ -611,7 +872,7 @@ class CatalogController {
       const { albumId } = req.params;
       const album = await Album.findByIdAndDelete(albumId);
       if (!album) throw new NotFoundError('Không tìm thấy album để xóa');
-      
+
       // Xóa liên kết ở các bài hát
       await Track.updateMany({ albumId: albumId }, { $unset: { albumId: "" } });
 
@@ -638,44 +899,54 @@ class CatalogController {
       });
 
       await comment.save();
-      
+
       // Populate thông tin user để frontend hiển thị và gửi thông báo
       const populatedComment = await Comment.findById(comment._id).populate('userId', 'displayName avatarUrl');
       const track = await Track.findById(trackId);
-      
+
       if (populatedComment && track) {
         const senderName = (populatedComment.userId as any).displayName;
+        const senderId = (populatedComment.userId as any)._id.toString();
 
-        // 1. Thông báo cho người được nhắc tên (@DisplayName)
+        // 1. Lấy danh sách ID người được Tag (@)
         const mentionRegex = /@([a-zA-Z0-9_\s]+)/g;
         let match;
-        const mentionedNames = new Set<string>();
-        while ((match = mentionRegex.exec(content)) !== null) {
-          mentionedNames.add(match[1].trim());
-        }
+        const mentionedUserIds = new Set<string>();
 
-        for (const name of mentionedNames) {
+        // Tìm tất cả user được tag
+        const matches = [...content.matchAll(mentionRegex)];
+        for (const m of matches) {
+          const name = m[1].trim();
           const mentionedUser = await User.findOne({ displayName: name });
-          if (mentionedUser && String(mentionedUser._id) !== String(userId)) {
+          if (mentionedUser && String(mentionedUser._id) !== senderId) {
+            mentionedUserIds.add(mentionedUser._id.toString());
+
+            console.log(`[Catalog] Sending Tag Notification to user: ${mentionedUser._id}`);
             NotificationService.notifyCommentTag(
-              mentionedUser._id.toString(), 
-              senderName, 
-              track.title, 
-              trackId
-            ).catch(console.error);
+              mentionedUser._id.toString(),
+              senderName,
+              track.title,
+              trackId,
+              senderId
+            ).catch(err => console.error('[Notification Error - Tag]:', err));
           }
         }
 
-        // 2. Thông báo cho chủ sở hữu bình luận cha (nếu là reply)
+        // 2. Thông báo cho chủ sở hữu bình luận cha (nếu là reply và CHƯA được báo qua Tag)
         if (parentId) {
           const parentComment = await Comment.findById(parentId);
-          if (parentComment && String(parentComment.userId) !== String(userId)) {
+          if (parentComment &&
+            String(parentComment.userId) !== senderId &&
+            !mentionedUserIds.has(parentComment.userId.toString())) {
+
+            console.log(`[Catalog] Sending Reply Notification to user: ${parentComment.userId}`);
             NotificationService.notifyReply(
               parentComment.userId.toString(),
               senderName,
               track.title,
-              trackId
-            ).catch(console.error);
+              trackId,
+              senderId
+            ).catch(err => console.error('[Notification Error - Reply]:', err));
           }
         }
       }
@@ -794,6 +1065,242 @@ class CatalogController {
 
       const follow = await Follow.findOne({ followerId: userId, followingId: artistId });
       return res.json(new SuccessResponse('Lấy trạng thái theo dõi thành công', { isFollowing: !!follow }));
+    } catch (error) {
+      next(error);
+    }
+  }
+  // 23. Sinh lời bài hát bằng AI (Hugging Face Whisper)
+  public async generateLyrics(req: any, res: Response, next: NextFunction) {
+    try {
+      const { trackId } = req.params;
+      const track = await Track.findById(trackId);
+
+      if (!track) throw new NotFoundError('Không tìm thấy bài hát');
+      if (!process.env.GROQ_API_KEY) {
+        return res.status(400).json({ success: false, message: 'Vui lòng thêm GROQ_API_KEY vào file .env' });
+      }
+
+      console.log(`[AI] Bắt đầu phân tích Lời bài hát cho: ${track.title} - ${track.artist}`);
+
+      let syncedLyrics: { start: number; end: number; text: string }[] = [];
+
+      // ==========================================
+      // BƯỚC 1: ƯU TIÊN TÌM LỜI CHUẨN TRÊN THƯ VIỆN TOÀN CẦU (LRCLIB) - CHỈ KHI USER CHƯA NHẬP LỜI
+      // ==========================================
+      const hasManualLyrics = track.lyrics && track.lyrics.trim() !== '' && !track.lyrics.includes('[00:');
+      
+      if (!hasManualLyrics) {
+        try {
+          console.log(`[AI] Đang tra cứu trên thư viện LRCLIB...`);
+          // Lọc bỏ các chữ thừa như "adm", "cover" trong tên nghệ sĩ để tìm kiếm dễ hơn
+          const cleanArtist = track.artist.replace(/,?\s*adm\s*/i, '').trim();
+          const searchUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(track.title)}&artist_name=${encodeURIComponent(cleanArtist)}`;
+          const lrcRes = await fetch(searchUrl);
+
+          if (lrcRes.ok) {
+            const lrcData: any = await lrcRes.json();
+            if (lrcData && lrcData.syncedLyrics) {
+              console.log(`[AI] 🎉 TÌM THẤY LỜI CHUẨN TRÊN LRCLIB!`);
+              const lines = lrcData.syncedLyrics.split('\n');
+              for (let i = 0; i < lines.length; i++) {
+                const match = lines[i].match(/\[(\d+):(\d+\.?\d*)\](.*)/);
+                if (match) {
+                  const min = parseInt(match[1]);
+                  const sec = parseFloat(match[2]);
+                  const text = match[3].trim();
+                  if (text) {
+                    syncedLyrics.push({
+                      start: min * 60 + sec,
+                      text: text,
+                      end: 0
+                    });
+                  }
+                }
+              }
+              // Tính end time
+              for (let i = 0; i < syncedLyrics.length; i++) {
+                syncedLyrics[i].end = i < syncedLyrics.length - 1 ? syncedLyrics[i + 1].start : syncedLyrics[i].start + 5;
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`[AI] Lỗi khi gọi LRCLIB:`, err);
+        }
+      } else {
+        console.log(`[AI] Phát hiện User tự nhập lời thủ công, bỏ qua LRCLIB để tránh ghi đè lời của User.`);
+      }
+
+      // ==========================================
+      // BƯỚC 2: NẾU KHÔNG CÓ TRÊN MẠNG -> DÙNG AI GROQ (WHISPER) ĐỂ NGHE VÀ CHÉP
+      // ==========================================
+      if (syncedLyrics.length === 0) {
+        console.log(`[AI] Không tìm thấy trên thư viện. Kích hoạt AI Groq (Whisper) để nghe file audio...`);
+
+        const audioRes = await fetch(track.audioUrl);
+        if (!audioRes.ok) throw new Error('Không thể tải file audio từ hệ thống lưu trữ');
+        const audioBlob = await audioRes.blob();
+
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.mp3');
+        formData.append('model', 'whisper-large-v3');
+        formData.append('response_format', 'verbose_json');
+        formData.append('temperature', '0.2'); // Giảm ảo giác của AI
+        // Để AI tự động nhận diện ngôn ngữ (auto-detect) thay vì ép tiếng Anh
+
+        try {
+          const openAiRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+            },
+            body: formData as any
+          });
+
+          if (!openAiRes.ok) {
+            const errData = await openAiRes.text();
+            throw new Error(errData);
+          }
+
+          const data: any = await openAiRes.json();
+          if (data.segments && data.segments.length > 0) {
+            console.log(`[AI] Phân tích AI hoàn tất!`);
+
+            syncedLyrics = data.segments.map((seg: any) => ({
+              text: seg.text.trim(),
+              start: seg.start,
+              end: seg.end
+            }));
+          }
+        } catch (networkErr: any) {
+          console.error(`[AI] Lỗi Groq AI:`, networkErr);
+          return res.status(503).json({
+            success: false,
+            message: `Lỗi AI: ${networkErr.message}`
+          });
+        }
+      }
+
+      if (syncedLyrics.length === 0) {
+        return res.status(400).json({ success: false, message: 'AI không tìm thấy lời hát nào trong audio này' });
+      }
+
+      const originalManualLyrics = track.lyrics;
+      if (track.lyrics && track.lyrics.trim() !== '' && !track.lyrics.includes('[00:')) {
+        console.log(`[AI] Đang đồng bộ hóa lời bài hát tự chế bằng Llama 3...`);
+        try {
+          const userLines = track.lyrics.split('\n').filter((l: string) => l.trim() !== '');
+          const fullTemplate = userLines.map((text: string) => ({ start: -1, end: -1, text }));
+          const aiSegments = syncedLyrics.map((s: any) => ({ start: s.start, end: s.end, text: s.text }));
+
+          // Hàm gọi Groq với retry
+          const callGroq = async (body: object): Promise<any> => {
+            let lastError = '';
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+              });
+
+              if (res.ok) return res.json();
+
+              const errBody = await res.text();
+              lastError = `HTTP ${res.status}: ${errBody}`;
+              console.error(`[AI] Groq API lỗi lần ${attempt}/3: ${lastError}`);
+
+              if (res.status === 429) {
+                const waitMs = attempt * 5000;
+                console.log(`[AI] Rate limit! Đợi ${waitMs / 1000}s rồi thử lại...`);
+                await new Promise(resolve => setTimeout(resolve, waitMs));
+              } else {
+                break;
+              }
+            }
+            throw new Error(`Groq API thất bại: ${lastError}`);
+          };
+
+          // Chia template thành chunks 25 dòng để tránh vượt token limit
+          const CHUNK_SIZE = 25;
+          const chunks: typeof fullTemplate[] = [];
+          for (let i = 0; i < fullTemplate.length; i += CHUNK_SIZE) {
+            chunks.push(fullTemplate.slice(i, i + CHUNK_SIZE));
+          }
+
+          console.log(`[AI] Chia ${userLines.length} dòng thành ${chunks.length} chunk(s), mỗi chunk tối đa ${CHUNK_SIZE} dòng...`);
+
+          const allAlignedLines: any[] = [];
+          for (let ci = 0; ci < chunks.length; ci++) {
+            const chunk = chunks[ci];
+            console.log(`[AI] Đang xử lý chunk ${ci + 1}/${chunks.length} (${chunk.length} dòng)...`);
+
+            const prompt = `You are an expert audio syncing tool.
+Your ONLY task is to fill in the "start" and "end" timestamps in the provided JSON array using data from the AI segments.
+
+CRITICAL RULES:
+1. You MUST return the JSON array EXACTLY as provided, with the same "text" fields. DO NOT change, merge, split, or delete any "text".
+2. Find the corresponding text in the AI segments and fill in the "start" and "end" fields.
+3. If the user's line is missing from the AI segments (e.g. intro), leave "start" and "end" as -1.
+4. If the user's line contains more words than the AI segment, map it to the EARLIEST 'start' time of the corresponding segments.
+
+JSON Template to fill in (DO NOT modify "text"):
+${JSON.stringify(chunk, null, 2)}
+
+AI segments (use these for timestamps):
+${JSON.stringify(aiSegments)}
+
+Return ONLY a JSON object in this format:
+{
+  "lyrics": [
+    { "start": number, "end": number, "text": "exact line from template" }
+  ]
+}
+Do not include markdown or explanations.`;
+
+            const chatData = await callGroq({
+              model: 'llama-3.1-8b-instant',
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.1,
+              response_format: { type: "json_object" }
+            });
+
+            const alignmentData = JSON.parse(chatData.choices[0].message.content);
+            if (alignmentData && alignmentData.lyrics && alignmentData.lyrics.length > 0) {
+              allAlignedLines.push(...alignmentData.lyrics);
+            } else {
+              throw new Error(`Chunk ${ci + 1} trả về format không hợp lệ`);
+            }
+
+            // Chờ 1 giây giữa các chunk để tránh rate limit
+            if (ci < chunks.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+
+          syncedLyrics = allAlignedLines;
+          console.log(`[AI] Đồng bộ Llama 3 thành công! Tổng ${syncedLyrics.length} dòng.`);
+        } catch (e) {
+          console.error(`[AI] Lỗi Llama 3 Sync, dùng lyrics mặc định làm fallback:`, e);
+        }
+      }
+
+      // Đảm bảo timestamps luôn mượt mà (chống lỗi AI gán nhiều dòng cùng 1 mốc tgian)
+      syncedLyrics = interpolateTimestamps(syncedLyrics);
+
+      // Cập nhật Database
+      track.syncedLyrics = syncedLyrics;
+
+      // Nối các câu lại để lưu vào trường lyrics dạng thô (CHỈ KHI User chưa có lời thủ công)
+      if (!originalManualLyrics || originalManualLyrics.trim() === '') {
+        track.lyrics = syncedLyrics.map((s: any) => s.text).join('\n');
+      }
+
+      await track.save();
+
+      console.log(`[AI] Success! Saved ${syncedLyrics.length} lyrics lines.`);
+      return res.json(new SuccessResponse('Phân tích lời bài hát thành công!', track));
     } catch (error) {
       next(error);
     }

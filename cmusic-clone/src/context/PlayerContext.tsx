@@ -28,6 +28,8 @@ export interface PlayerContextType {
   changeVolume: (e: any) => void;
   isSearchOpen: boolean;
   setIsSearchOpen: Dispatch<SetStateAction<boolean>>;
+  showLyrics: boolean;
+  setShowLyrics: Dispatch<SetStateAction<boolean>>;
 }
 
 export const PlayerContext = createContext<PlayerContextType | null>(null);

@@ -16,6 +16,7 @@ export const NowPlayingSidebar: React.FC = () => {
    const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
    const [artistData, setArtistData] = useState<any>(null);
    const [isFollowing, setIsFollowing] = useState(false);
+   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
    // Fetch recommended songs khi track thay đổi
    useEffect(() => {
@@ -195,19 +196,21 @@ export const NowPlayingSidebar: React.FC = () => {
                      <p className="text-zinc-400 text-[12px] font-bold tracking-tight">
                         {(mainArtist.stats.monthlyListeners).toLocaleString()} người nghe hằng tháng
                      </p>
-                     <button 
-                        onClick={(e) => {
-                           e.stopPropagation();
-                           handleFollowToggle();
-                        }}
-                        className={`px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-full hover:scale-105 active:scale-95 transition-all shadow-lg ${
-                           isFollowing 
-                           ? "bg-transparent text-white border border-white/20 hover:border-white" 
-                           : "bg-white text-black"
-                        }`}
-                     >
-                        {isFollowing ? "Đang theo dõi" : "Theo dõi"}
-                     </button>
+                     {(!currentUser._id || currentUser._id !== (mainArtist?.userId?._id || mainArtist?.userId || mainArtist?._id)) && (
+                        <button 
+                           onClick={(e) => {
+                              e.stopPropagation();
+                              handleFollowToggle();
+                           }}
+                           className={`px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-full hover:scale-105 active:scale-95 transition-all shadow-lg ${
+                              isFollowing 
+                              ? "bg-transparent text-white border border-white/20 hover:border-white" 
+                              : "bg-white text-black"
+                           }`}
+                        >
+                           {isFollowing ? "Đang theo dõi" : "Theo dõi"}
+                        </button>
+                     )}
                   </div>
 
                   <p className="text-zinc-500 text-[13px] leading-relaxed line-clamp-3 font-medium italic opacity-80 group-hover:opacity-100 transition-opacity">

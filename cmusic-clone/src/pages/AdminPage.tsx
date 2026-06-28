@@ -14,6 +14,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
 interface Track {
   _id: string;
   title: string;
+  artist: string;
   artistId: {
     displayName: string;
     avatarUrl: string;
@@ -29,7 +30,8 @@ export default function AdminPage() {
     totalUsers: 0,
     totalTracks: 0,
     totalPlays: 0,
-    growth: "0%"
+    growth: "0%",
+    topArtists: [] as { name: string, tracks: number, plays: string, avatar: string, avatarUrl?: string }[]
   });
 
   const fetchTracks = async () => {
@@ -87,12 +89,7 @@ export default function AdminPage() {
     { label: "Tỉ lệ tăng trưởng", value: "15.3%", icon: faArrowTrendUp, growth: "+4.1%", desc: "Tháng này" },
   ];
 
-  const topArtists = [
-    { name: "IU", tracks: 45, plays: "12.5M", avatar: "A" },
-    { name: "BTS", tracks: 78, plays: "98.7M", avatar: "B" },
-    { name: "NewJeans", tracks: 12, plays: "45.2M", avatar: "N" },
-    { name: "LE SSERAFIM", tracks: 18, plays: "23.4M", avatar: "L" },
-  ];
+  const topArtists = globalStats.topArtists || [];
 
   return (
     <div className="flex flex-col font-inter antialiased bg-[#050505]">
@@ -172,7 +169,7 @@ export default function AdminPage() {
                     </div>
                     <div className="-space-y-0.5">
                       <p className="text-white text-[13px] font-bold">{track.title}</p>
-                      <p className="text-zinc-500 text-[11px]">{track.artistId?.displayName || "Artist"}</p>
+                      <p className="text-zinc-500 text-[11px]">{track.artist || "Artist"}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-zinc-500">
@@ -199,8 +196,8 @@ export default function AdminPage() {
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-9 h-9 bg-[#111111] rounded-full flex items-center justify-center text-zinc-500 font-bold text-[11px] border border-white/[0.08]">
-                      {artist.avatar}
+                    <div className="w-9 h-9 bg-[#111111] rounded-full flex items-center justify-center text-zinc-500 font-bold text-[11px] border border-white/[0.08] overflow-hidden">
+                      {artist.avatarUrl ? <img src={artist.avatarUrl} className="w-full h-full object-cover" /> : artist.avatar}
                     </div>
                     <div className="-space-y-0.5">
                       <p className="text-white text-[13px] font-bold">{artist.name}</p>

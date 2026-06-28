@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
+import { fetchSongs } from "../store/slices/songSlice";
 import api from "../services/api"; // Added comment
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -7,8 +9,22 @@ import {
   faSearch,
   faTrash,
   faEdit,
-  faTimes
+  faTimes,
+  faCheck,
+  faMagic
 } from "@fortawesome/free-solid-svg-icons";
+
+const GENRES = [
+  "V-POP", "K-POP", "J-POP", "US-UK", 
+  "Pop", "Ballad", "Rock", "R&B", "Hip-Hop", "Rap",
+  "Indie", "EDM", "Dance", "Vinahouse", "Lo-fi", 
+  "Acoustic", "Jazz", "Bolero", "Nhạc Trịnh", "Classical",
+  "Country", "Funk", "Soul", "Disco", "Alternative",
+  "Ambient", "Blues", "Electronic", "Folk", "Gospel",
+  "Heavy Metal", "Instrumental", "Latin", "New Age",
+  "Opera", "Punk", "Reggae", "Synthpop", "Techno",
+  "Trance", "Trap", "World Music"
+];
 
 interface Track {
   _id: string;
@@ -25,6 +41,7 @@ interface Track {
 
 export default function TrackManagementPage() {
   const navigate = useNavigate();
+  const dispatch = useDispatch<any>();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [officialArtists, setOfficialArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +63,27 @@ export default function TrackManagementPage() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingTrack, setDeletingTrack] = useState<Track | null>(null);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [genreSearch, setGenreSearch] = useState("");
+  const [showGenreDropdown, setShowGenreDropdown] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState<string | null>(null);
+
+  const handleGenerateAILyrics = async (track: Track) => {
+    if (window.confirm(`Bạn có muốn AI phân tích và tự động chạy lời cho bài hát "${track.title}" không?\nLưu ý: Quá trình này có thể mất vài giây đến vài chục giây tùy độ dài bài hát.`)) {
+      setGeneratingAI(track._id);
+      try {
+        const res = await api.post(`/catalog/tracks/${track._id}/generate-lyrics`);
+        if (res.data.success) {
+          alert("Thành công! AI đã phân tích lời bài hát.\n\n CẢNH BÁO: AI có thể nghe sai một vài từ. Vui lòng bấm vào nút 'Sửa' (icon bút chì), kiểm tra lại đoạn văn bản lời bài hát và sửa những từ bị sai. Sau khi bạn Lưu, hệ thống sẽ tự động ghép nhịp chuẩn xác vào lời bạn vừa sửa!");
+          fetchTracks();
+        }
+      } catch (error: any) {
+        alert(error.response?.data?.message || "Lỗi khi phân tích AI. Vui lòng kiểm tra lại cấu hình API Key.");
+      } finally {
+        setGeneratingAI(null);
+      }
+    }
+  };
 
   const fetchTracks = async () => {
     setLoading(true);
@@ -99,13 +137,18 @@ export default function TrackManagementPage() {
           : (fullTrack.officialArtistId ? [fullTrack.officialArtistId] : []);
 
         setSelectedArtists(artistsList);
+        setSelectedGenres(fullTrack.genre || []);
+
+        const artistIdStr = typeof fullTrack.artistId === 'object' 
+          ? (fullTrack.artistId?._id || fullTrack.artistId?.toString()) 
+          : fullTrack.artistId;
 
         setEditFormData({
           title: fullTrack.title,
           artist: fullTrack.artist || "",
           genre: (fullTrack.genre || []).join(", "),
           lyrics: fullTrack.lyrics || "",
-          artistId: fullTrack.artistId?._id || "",
+          artistId: artistIdStr || "",
           albumId: fullTrack.albumId?._id || fullTrack.albumId || "",
           coverUrl: fullTrack.coverUrl || ""
         });
@@ -140,8 +183,19 @@ export default function TrackManagementPage() {
       if (coverFile) {
         const formData = new FormData();
         formData.append("title", editFormData.title);
-        formData.append("artist", editFormData.artist);
-        formData.append("genre", editFormData.genre);
+        
+        // Gộp tên nghệ sĩ
+        const selectedNames = selectedArtists.map(a => a.name);
+        let displayArtist = selectedNames.join(", ");
+        if (editFormData.artist && editFormData.artist.trim() !== "" && !selectedNames.some(name => editFormData.artist.includes(name))) {
+          displayArtist = displayArtist ? `${displayArtist}, ${editFormData.artist}` : editFormData.artist;
+        }
+        formData.append("artist", displayArtist);
+
+        // Gửi mảng thể loại
+        selectedGenres.forEach(g => {
+          formData.append("genre[]", g);
+        });
         formData.append("lyrics", editFormData.lyrics);
         formData.append("artistId", editFormData.artistId);
         formData.append("albumId", editFormData.albumId);
@@ -157,18 +211,27 @@ export default function TrackManagementPage() {
           headers: { "Content-Type": "multipart/form-data" }
         });
       } else {
+        // Gộp tên nghệ sĩ cho PATCH
+        const selectedNames = selectedArtists.map(a => a.name);
+        let displayArtist = selectedNames.join(", ");
+        if (editFormData.artist && editFormData.artist.trim() !== "" && !selectedNames.some(name => editFormData.artist.includes(name))) {
+          displayArtist = displayArtist ? `${displayArtist}, ${editFormData.artist}` : editFormData.artist;
+        }
+
         res = await api.patch(`/catalog/tracks/${editingTrack._id}`, {
           title: editFormData.title,
-          artist: editFormData.artist,
-          genre: editFormData.genre.split(",").map(g => g.trim()),
+          artist: displayArtist,
+          genre: selectedGenres,
           lyrics: editFormData.lyrics,
           artistId: editFormData.artistId,
+          albumId: editFormData.albumId || null,
           officialArtistId: officialArtistIds.length > 0 ? officialArtistIds : null
         });
       }
 
       if (res.data.success) {
         fetchTracks();
+        dispatch(fetchSongs()); // Cập nhật lại Redux store
         setEditingTrack(null);
       }
     } catch (error) {
@@ -198,6 +261,7 @@ export default function TrackManagementPage() {
     try {
       await api.delete(`/catalog/tracks/${deletingTrack._id}`);
       setTracks(tracks.filter(t => t._id !== deletingTrack._id));
+      dispatch(fetchSongs()); // Cập nhật lại Redux store
       setDeletingTrack(null);
     } catch (error) {
       alert("Xóa thất bại!");
@@ -283,6 +347,14 @@ export default function TrackManagementPage() {
                     <td className="px-8 py-5 text-zinc-500 text-[12px] font-medium">{formatDate(track.createdAt)}</td>
                     <td className="px-8 py-5 text-right">
                       <div className="flex items-center justify-end gap-2 outline-none">
+                        <button 
+                          onClick={() => handleGenerateAILyrics(track)} 
+                          disabled={generatingAI === track._id}
+                          title="Phân tích Lời bài hát bằng AI"
+                          className="w-9 h-9 flex items-center justify-center rounded-lg text-[#a855f7] hover:text-white hover:bg-[#a855f7]/20 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <FontAwesomeIcon icon={faMagic} className={`text-[11px] ${generatingAI === track._id ? 'animate-pulse' : ''}`} />
+                        </button>
                         <button onClick={() => handleEditClick(track)} className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-600 hover:text-white hover:bg-white/5 transition-all cursor-pointer">
                           <FontAwesomeIcon icon={faEdit} className="text-[11px]" />
                         </button>
@@ -424,13 +496,92 @@ export default function TrackManagementPage() {
                   </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-zinc-500 text-[11px] font-black uppercase tracking-widest">Thể loại (Phân cách bằng dấu phẩy)</label>
-                <input type="text" value={editFormData.genre} onChange={(e) => setEditFormData({ ...editFormData, genre: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-[#ff2d55]/50 transition-all font-medium" />
+              {/* Modern Multi-Genre Selector for Edit */}
+              <div className="space-y-4 relative">
+                <div className="flex justify-between items-center">
+                  <label className="text-zinc-500 text-[11px] font-black uppercase tracking-widest leading-none">Thể loại nhạc *</label>
+                  <span className="text-[10px] font-bold text-[#ff2d55]">Đã chọn {selectedGenres.length}</span>
+                </div>
+
+                {/* Tags display */}
+                {selectedGenres.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedGenres.map(g => (
+                      <div key={g} className="flex items-center gap-2 bg-[#ff2d55]/10 border border-[#ff2d55]/20 px-3 py-1.5 rounded-full group">
+                        <span className="text-white text-[10px] font-bold uppercase tracking-widest">{g}</span>
+                        <button 
+                          onClick={() => setSelectedGenres(selectedGenres.filter(item => item !== g))}
+                          className="text-zinc-600 hover:text-[#ff2d55] transition-colors"
+                        >
+                          <FontAwesomeIcon icon={faTimes} className="text-[10px]" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={genreSearch}
+                    onFocus={() => setShowGenreDropdown(true)}
+                    onBlur={() => {
+                      // Đóng dropdown sau một khoảng thời gian ngắn để kịp nhận sự kiện click
+                      setTimeout(() => setShowGenreDropdown(false), 200);
+                    }}
+                    onChange={(e) => setGenreSearch(e.target.value)}
+                    placeholder="Tìm kiếm và chọn thể loại nhạc..."
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-[#ff2d55]/50 transition-all font-medium"
+                  />
+                </div>
+
+                {showGenreDropdown && (
+                  <div 
+                    className="absolute top-[calc(100%+8px)] left-0 right-0 bg-[#121212] border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2 duration-200"
+                    onMouseDown={(e) => e.preventDefault()} // Ngăn chặn mất focus khi click vào dropdown
+                  >
+                    <div className="max-h-60 overflow-y-auto custom-scrollbar p-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        {GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase())).map(g => {
+                          const isSelected = selectedGenres.includes(g);
+                          return (
+                            <div 
+                              key={g}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedGenres(selectedGenres.filter(item => item !== g));
+                                } else {
+                                  setSelectedGenres([...selectedGenres, g]);
+                                }
+                              }}
+                              className={`flex items-center justify-between px-4 py-2.5 rounded-xl cursor-pointer transition-all border ${
+                                isSelected 
+                                ? "bg-[#ff2d55]/10 border-[#ff2d55]/20" 
+                                : "bg-white/[0.02] border-transparent hover:bg-white/5"
+                              }`}
+                            >
+                              <span className={`text-[12px] font-bold tracking-tight ${isSelected ? "text-white" : "text-zinc-500"}`}>{g}</span>
+                              {isSelected && <FontAwesomeIcon icon={faCheck} className="text-[#ff2d55] text-[10px]" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+
               </div>
               <div className="space-y-2">
                 <label className="text-zinc-500 text-[11px] font-black uppercase tracking-widest">Lời bài hát</label>
                 <textarea rows={8} value={editFormData.lyrics} onChange={(e) => setEditFormData({ ...editFormData, lyrics: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 px-4 text-white outline-none focus:border-[#ff2d55]/50 transition-all font-medium resize-none leading-relaxed" />
+                <p className="text-zinc-500 text-[11px] font-medium italic mt-2 leading-relaxed bg-[#ff2d55]/5 border border-[#ff2d55]/10 p-3 rounded-lg">
+                  <strong className="text-white">Hướng dẫn đồng bộ chữ chạy:</strong><br/>
+                  - Bấm nút <strong className="text-white">"Phân tích lời bài hát bằng AI"</strong> để hệ thống tự động ghép nhịp ca sĩ!<br/>
+                  - Nếu bạn có lời định dạng <code className="bg-white/10 px-1 rounded text-[#ff2d55]">[00:15.50]</code>, hãy dán vào đây, chữ sẽ tự động chạy theo nhịp.<br/>
+                  - Nếu chỉ có <strong>văn bản thường</strong>, hãy dán vào, bấm <strong className="text-white">Lưu thay đổi</strong>. Sau đó nhớ ra ngoài bấm nút <strong className="text-white">"Phân tích lời bài hát bằng AI"</strong> để hệ thống tự động ghép nhịp ca sĩ!
+
+                </p>
               </div>
             </div>
             <div className="px-8 py-6 border-t border-white/10 bg-white/[0.02] flex justify-end gap-4">

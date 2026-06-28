@@ -24,6 +24,9 @@ const router = Router();
 // Lấy danh sách bài hát
 router.get("/tracks", catalogController.getTracks);
 
+// Lấy Smart Playlists (Playlist thông minh tự động theo thể loại)
+router.get("/tracks/smart-playlists", catalogController.getRecommendedPlaylists);
+
 // Lấy chi tiết một bài hát
 router.get("/tracks/:trackId", catalogController.getTrackById);
 
@@ -74,6 +77,12 @@ router.patch(
 router.delete(
   "/tracks/:trackId",
   catalogController.deleteTrack
+);
+
+// Phân tích lời bài hát bằng AI
+router.post(
+  "/tracks/:trackId/generate-lyrics",
+  catalogController.generateLyrics
 );
 
 // ─── ARTIST ROUTES ───────────────────────────────────────────────────────

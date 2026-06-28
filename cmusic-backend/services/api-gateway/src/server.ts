@@ -249,6 +249,25 @@ app.use("/api/notifications", authenticate, createProxyMiddleware({
   }
 }));
 
+// 11. Payment Service
+app.use("/api/payment", (req: any, res: Response, next: NextFunction) => {
+  // Callback từ ZaloPay không cần token
+  if (req.method === 'POST' && req.path === '/callback') {
+    return next();
+  }
+  return authenticate(req as any, res, next);
+}, createProxyMiddleware({
+  target: SERVICES.PAYMENT,
+  changeOrigin: true,
+  on: {
+    proxyReq: (proxyReq: any, req: any) => {
+      console.log(`[GATEWAY PROXY] Forwarding ${req.method} ${req.originalUrl} -> ${SERVICES.PAYMENT}${proxyReq.path}`);
+      const userId = req.user?.userId || req.headers['x-user-id'];
+      if (userId) proxyReq.setHeader('x-user-id', userId);
+    }
+  }
+}));
+
 // ===== GLOBAL ERROR HANDLING =====
 app.use(errorMiddleware as any);
 

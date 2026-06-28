@@ -93,3 +93,30 @@ export const getMyProfile = async () => {
   }
 };
 
+/**
+ * Lấy danh sách yêu cầu đăng ký nghệ sĩ (Admin)
+ */
+export const getArtistRequests = async (status?: string) => {
+  try {
+    const params = status ? { status } : {};
+    const response = await api.get("/users/artist-requests", { params });
+    return response.data;
+  } catch (error: any) {
+    console.error("Get artist requests error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Cập nhật trạng thái yêu cầu nghệ sĩ (Admin)
+ */
+export const updateArtistRequestStatus = async (requestId: string, status: 'approved' | 'rejected') => {
+  try {
+    const response = await api.put(`/users/artist-requests/${requestId}`, { status });
+    return response.data;
+  } catch (error: any) {
+    console.error("Update artist request error:", error);
+    throw error;
+  }
+};
+

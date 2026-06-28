@@ -12,6 +12,11 @@ export interface ITrack extends Document {
   genre?: string[];
   playCount: number;
   lyrics?: string;
+  syncedLyrics?: {
+    text: string;
+    start: number;
+    end: number;
+  }[];
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -30,6 +35,11 @@ const TrackSchema: Schema = new Schema(
     genre: [{ type: String }],
     playCount: { type: Number, default: 0 },
     lyrics: { type: String },
+    syncedLyrics: [{
+      text: { type: String },
+      start: { type: Number },
+      end: { type: Number }
+    }],
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }

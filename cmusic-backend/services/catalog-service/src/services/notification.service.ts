@@ -19,9 +19,10 @@ export class NotificationService {
     }
   }
 
-  static async notifyCommentTag(recipientId: string, senderName: string, trackTitle: string, trackId: string) {
+  static async notifyCommentTag(recipientId: string, senderName: string, trackTitle: string, trackId: string, senderId: string) {
     return this.send({
       recipientId,
+      senderId,
       type: 'COMMENT_TAG',
       title: 'Bạn được nhắc tên!',
       message: `${senderName} đã nhắc đến bạn trong một bình luận ở bài hát "${trackTitle}"`,
@@ -30,9 +31,10 @@ export class NotificationService {
     });
   }
 
-  static async notifyReply(recipientId: string, senderName: string, trackTitle: string, trackId: string) {
+  static async notifyReply(recipientId: string, senderName: string, trackTitle: string, trackId: string, senderId: string) {
     return this.send({
       recipientId,
+      senderId,
       type: 'REPLY',
       title: 'Có phản hồi mới!',
       message: `${senderName} đã phản hồi bình luận của bạn trong bài hát "${trackTitle}"`,
@@ -44,11 +46,12 @@ export class NotificationService {
   static async notifyFollow(recipientId: string, followerName: string, followerId: string) {
     return this.send({
       recipientId,
+      senderId: followerId,
       type: 'FOLLOW',
       title: 'Người theo dõi mới!',
       message: `${followerName} đã bắt đầu theo dõi bạn.`,
-      link: `/artist/${recipientId}`, // Giả định recipient là artist
-      senderId: followerId
+      link: `/artist/${recipientId}`,
+      data: { followerId }
     });
   }
 }

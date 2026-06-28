@@ -18,7 +18,11 @@ const GENRES = [
   "Pop", "Ballad", "Rock", "R&B", "Hip-Hop", "Rap",
   "Indie", "EDM", "Dance", "Vinahouse", "Lo-fi", 
   "Acoustic", "Jazz", "Bolero", "Nhạc Trịnh", "Classical",
-  "Country", "Funk", "Soul", "Disco"
+  "Country", "Funk", "Soul", "Disco", "Alternative",
+  "Ambient", "Blues", "Electronic", "Folk", "Gospel",
+  "Heavy Metal", "Instrumental", "Latin", "New Age",
+  "Opera", "Punk", "Reggae", "Synthpop", "Techno",
+  "Trance", "Trap", "World Music"
 ];
 
 export default function UploadPage() {
@@ -28,7 +32,9 @@ export default function UploadPage() {
   const [selectedArtists, setSelectedArtists] = useState<any[]>([]); // Danh sách Profile chính thức
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [genre, setGenre] = useState("");
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [genreSearch, setGenreSearch] = useState("");
+  const [showGenreDropdown, setShowGenreDropdown] = useState(false);
   const [albums, setAlbums] = useState<any[]>([]);
   const [selectedAlbumId, setSelectedAlbumId] = useState("");
 
@@ -116,13 +122,20 @@ export default function UploadPage() {
     const formData = new FormData();
     formData.append("title", title);
     
-    // Nếu có chọn profile chính thức, dùng tên của họ làm artist display name
-    const displayArtist = selectedArtists.length > 0 
-      ? selectedArtists.map(a => a.name).join(", ") 
-      : artist;
+    // Gộp tên từ profile chính thức và nội dung đang gõ trong ô input
+    const selectedNames = selectedArtists.map(a => a.name);
+    let displayArtist = selectedNames.join(", ");
+    
+    // Nếu trong ô input có nội dung khác ngoài tên nghệ sĩ đã chọn, gộp nó vào
+    if (artist && artist.trim() !== "" && !selectedNames.some(name => artist.includes(name))) {
+      displayArtist = displayArtist ? `${displayArtist}, ${artist}` : artist;
+    }
     
     formData.append("artist", displayArtist); 
-    formData.append("genre", genre);
+    // Gửi mảng thể loại (convert sang JSON string hoặc gửi nhiều lần)
+    selectedGenres.forEach(g => {
+      formData.append("genre[]", g);
+    });
     formData.append("duration", duration || "0");
     formData.append("audio", audioFile);
     
@@ -162,7 +175,8 @@ export default function UploadPage() {
              onClick={() => {
                 setSuccess(false);
                 setTitle("");
-                setGenre("");
+                setGenreSearch("");
+                setSelectedGenres([]);
                 setDuration("");
                 setAudioFile(null);
                 setCoverFile(null);
@@ -331,25 +345,94 @@ export default function UploadPage() {
                   )}
                 </div>
 
-                {/* Genre Selector */}
-                <div className="space-y-3">
-                  <label className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest ml-0.5">Thể loại</label>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                      {GENRES.map(g => (
-                          <button 
-                            key={g}
-                            type="button"
-                            onClick={() => setGenre(g)}
-                            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${
-                              genre === g 
-                              ? "bg-[#ff2d55] text-white shadow-[0_0_15px_rgba(255,45,85,0.3)]" 
-                              : "bg-white/[0.03] text-zinc-600 border border-white/[0.05] hover:border-white/20 hover:text-white"
-                            }`}
-                          >
-                            {g}
-                          </button>
-                      ))}
+                {/* Modern Multi-Genre Selector */}
+                <div className="space-y-4 relative">
+                  <div className="flex justify-between items-center">
+                    <label className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest ml-0.5">Thể loại nhạc *</label>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-[#ff2d55]">
+                      Đã chọn {selectedGenres.length} thể loại
+                    </span>
                   </div>
+
+                  {/* Selected Genres Tags */}
+                  {selectedGenres.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {selectedGenres.map(g => (
+                        <div key={g} className="flex items-center gap-2 bg-[#ff2d55]/10 border border-[#ff2d55]/20 px-3 py-1.5 rounded-full group hover:bg-[#ff2d55]/20 transition-all">
+                          <span className="text-white text-[10px] font-black uppercase tracking-widest">{g}</span>
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedGenres(selectedGenres.filter(item => item !== g))}
+                            className="text-zinc-600 hover:text-[#ff2d55] transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={genreSearch}
+                      onFocus={() => setShowGenreDropdown(true)}
+                      onChange={(e) => setGenreSearch(e.target.value)}
+                      placeholder="Chọn hoặc tìm kiếm thêm thể loại..."
+                      className="w-full bg-[#080808] border border-white/[0.05] focus:border-[#ff2d55]/30 rounded-xl px-5 py-4 text-white text-[13px] outline-none transition-all placeholder:text-zinc-800"
+                    />
+                    <div className="absolute right-5 inset-y-0 flex items-center pointer-events-none">
+                       <svg className={`w-4 h-4 text-zinc-700 transition-transform duration-300 ${showGenreDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </div>
+                  </div>
+
+                  {/* Genre Dropdown List */}
+                  {showGenreDropdown && (
+                    <div className="absolute top-[calc(100%+8px)] left-0 right-0 bg-[#0c0c0c] border border-white/10 rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-[50] animate-in slide-in-from-top-2 duration-300 flex flex-col max-h-[350px]">
+                      <div className="p-4 border-b border-white/[0.05] bg-white/[0.01]">
+                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Tất cả thể loại ({GENRES.length})</p>
+                      </div>
+                      <div className="overflow-y-auto custom-scrollbar-hidden p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          {GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase())).map(g => {
+                            const isSelected = selectedGenres.includes(g);
+                            return (
+                              <div 
+                                key={g}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedGenres(selectedGenres.filter(item => item !== g));
+                                  } else {
+                                    setSelectedGenres([...selectedGenres, g]);
+                                  }
+                                }}
+                                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl cursor-pointer transition-all border ${
+                                  isSelected 
+                                  ? "bg-[#ff2d55]/10 border-[#ff2d55]/30 group" 
+                                  : "bg-white/[0.02] border-transparent hover:bg-white/[0.05] hover:border-white/10"
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                  isSelected ? "bg-[#ff2d55] border-[#ff2d55]" : "border-zinc-700 bg-transparent"
+                                }`}>
+                                  {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                </div>
+                                <span className={`text-[12px] font-bold tracking-tight transition-colors ${isSelected ? "text-white" : "text-zinc-500"}`}>{g}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {GENRES.filter(g => g.toLowerCase().includes(genreSearch.toLowerCase())).length === 0 && (
+                          <div className="py-10 text-center opacity-40 text-zinc-500 text-[11px] font-bold uppercase tracking-widest">Không tìm thấy thể loại nào</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Backdrop to close genre dropdown */}
+                  {showGenreDropdown && (
+                    <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setShowGenreDropdown(false)}></div>
+                  )}
                 </div>
 
                 {/* Duration Field */}
